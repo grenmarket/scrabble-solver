@@ -1,6 +1,7 @@
 class IllegalMove(Exception):
     pass
 
+
 class Board:
 
     def __init__(self):
@@ -25,12 +26,12 @@ class Board:
             if col + size > 15:
                 raise IllegalMove
             for i in range(size):
-                self.place_letter(word[i], row, col+i)
+                self.place_letter(word[i], row, col + i)
         else:
             if row + size > 15:
                 raise IllegalMove
             for i in range(size):
-                self.place_letter(word[i], row+i, col)
+                self.place_letter(word[i], row + i, col)
 
     def print(self):
         print(' ' + ' _ ' * 15)

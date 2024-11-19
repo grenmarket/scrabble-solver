@@ -1,6 +1,5 @@
 from board import Board
+from scores import Score
 
-board = Board()
-board.place('LASKA', 3, 5, False)
-board.place('las', 0, 12, True)
-board.print()
+score = Score()
+score.print()
