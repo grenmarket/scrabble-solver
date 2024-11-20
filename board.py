@@ -30,18 +30,18 @@ class Board:
         else:
             raise IllegalMove
 
-    def place_tiles(self, word, row, col, horizontal):
-        size = len(word)
+    def place_tiles(self, tiles, row, col, horizontal):
+        size = len(tiles)
         if horizontal:
             if col + size > 15:
                 raise IllegalMove
             for i in range(size):
-                self.place_tile(word[i], row, col + i)
+                self.place_tile(tiles[i], row, col + i)
         else:
             if row + size > 15:
                 raise IllegalMove
             for i in range(size):
-                self.place_tile(word[i], row + i, col)
+                self.place_tile(tiles[i], row + i, col)
 
     def place(self, word, row, col, horizontal):
         tiles = [Tile.of(ch) for ch in word]
