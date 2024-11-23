@@ -54,3 +54,9 @@ class Validator:
         word = ''.join(tile.char for tile in destination.tiles)
         if not self.exists(word):
             return False
+        poi = self.points_of_interest(board, destination)
+        if len(poi) == 0:
+            if board.is_empty:
+                return destination.covers(7, 7)
+            else:
+                return False

@@ -28,6 +28,14 @@ class Destination:
     def of(tiles, row, col, horizontal):
         return Destination(tiles, row, col, horizontal)
 
+    def covers(self, row, col):
+        if self.horizontal:
+            is_col = self.col <= col <= self.col + len(self.tiles)
+            return self.row == row and is_col
+        else:
+            is_row = self.row <= row <= self.row + len(self.tiles)
+            return self.col == col and is_row
+
 
 class Board:
 
