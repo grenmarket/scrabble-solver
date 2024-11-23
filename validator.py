@@ -2,6 +2,8 @@
 # this line must be adjacent to (or crossing) some existing tiles (except the first move)
 # all newly formed words must exist
 
+from board import Destination
+
 class Validator:
 
     def __init__(self):
@@ -18,14 +20,14 @@ class Validator:
     def points_of_interest(self, board, tiles, row, col, horizontal):
         return 
 
-    def validate(self, board, tiles, row, col, horizontal):
-        size = len(tiles)
-        if horizontal:
-            if col + size > 15:
+    def validate(self, board, destination):
+        size = len(destination.tiles)
+        if destination.horizontal:
+            if destination.col + size > 15:
                 return False
         else:
-            if row + size > 15:
+            if destination.row + size > 15:
                 return False
-        word = ''.join(tile.char for tile in tiles)
+        word = ''.join(tile.char for tile in destination.tiles)
         if not self.exists(word):
             return False

@@ -12,6 +12,17 @@ class Tile:
     def of(char):
         return Tile(char.upper(), char.upper())
 
+class Destination:
+
+    def __init__(self, tiles, row, col, horizontal):
+        self.tiles = tiles
+        self.row = row
+        self.col = col
+        self.horizontal = horizontal
+
+    @staticmethod
+    def of(tiles, row, col, horizontal):
+        return Destination(tiles, row, col, horizontal)
 
 class Board:
 
@@ -30,22 +41,22 @@ class Board:
         else:
             raise IllegalMove
 
-    def place_tiles(self, tiles, row, col, horizontal):
-        size = len(tiles)
-        if horizontal:
-            if col + size > 15:
+    def place_tiles(self, destination):
+        size = len(destination.tiles)
+        if destination.horizontal:
+            if destination.col + size > 15:
                 raise IllegalMove
             for i in range(size):
-                self.place_tile(tiles[i], row, col + i)
+                self.place_tile(destination.tiles[i], destination.row, destination.col + i)
         else:
-            if row + size > 15:
+            if destination.row + size > 15:
                 raise IllegalMove
             for i in range(size):
-                self.place_tile(tiles[i], row + i, col)
+                self.place_tile(destination.tiles[i], destination.row + i, destination.col)
 
     def place(self, word, row, col, horizontal):
         tiles = [Tile.of(ch) for ch in word]
-        self.place_tiles(tiles, row, col, horizontal)
+        self.place_tiles(Destination.of(tiles, row, col, horizontal))
 
     def print(self):
         print(' ' + ' _ ' * 15)
