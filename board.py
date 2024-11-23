@@ -12,6 +12,10 @@ class Tile:
     def of(char):
         return Tile(char.upper(), char.upper())
 
+    @staticmethod
+    def of_word(word):
+        return [Tile.of(ch) for ch in word]
+
 class Destination:
 
     def __init__(self, tiles, row, col, horizontal):
@@ -24,15 +28,21 @@ class Destination:
     def of(tiles, row, col, horizontal):
         return Destination(tiles, row, col, horizontal)
 
+
 class Board:
 
     def __init__(self):
         self.matrix = [[None for i in range(15)] for i in range(15)]
+        self.is_empty = True
+
 
     def copy(self):
         board = Board()
         board.matrix = self.matrix
         return board
+
+    def get_tile(self, row, col):
+        return self.matrix[row][col]
 
     def place_tile(self, tile, row: int, col: int):
         curr = self.matrix[row][col]
@@ -53,9 +63,10 @@ class Board:
                 raise IllegalMove
             for i in range(size):
                 self.place_tile(destination.tiles[i], destination.row + i, destination.col)
+        self.is_empty = False
 
     def place(self, word, row, col, horizontal):
-        tiles = [Tile.of(ch) for ch in word]
+        tiles = Tile.of_word(word)
         self.place_tiles(Destination.of(tiles, row, col, horizontal))
 
     def print(self):
