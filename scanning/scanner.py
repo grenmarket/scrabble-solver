@@ -2,11 +2,14 @@ import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
 import pytesseract
+import easyocr
+from PIL import Image
 
+reader = easyocr.Reader(['pl'])
 
 def extract_board_image(path):
     raw_img = cv.imread(path)
-    img = cv.resize(raw_img, None, fx=0.25, fy=0.25)
+    img = cv.resize(raw_img, None, fx=0.50, fy=0.50)
     gray_image = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
     blurred = cv.GaussianBlur(gray_image, (5, 5), 0)
@@ -98,68 +101,82 @@ def extract_letters_from_board(image):
         for col in range(15):
             # Extract the tile region
             x_start, y_start = col * grid_size, row * grid_size
-            tile = resized[y_start:y_start + grid_size, x_start:x_start + grid_size]
+            tile_raw = resized[y_start:y_start + grid_size, x_start:x_start + grid_size]
+            tile = enhance_tile(tile_raw)
 
             # Preprocess tile (binarization to improve OCR accuracy)
             # _, tile_thresh = cv.threshold(tile, 150, 255, cv.THRESH_BINARY_INV)
 
             # Use OCR with confidence scores
-            ocr_data = pytesseract.image_to_data(
-                tile,
-                lang='pol',
-                config='--psm 10 -c tessedit_char_whitelist=AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUVWXYZŻŹ',
-                output_type=pytesseract.Output.DICT
-            )
-
-            # Extract the letter with the highest confidence
-            text = None
-            max_confidence = 0
-
-            for i, conf in enumerate(ocr_data['conf']):
-                if conf != '-1':  # Exclude empty results
-                    conf = int(conf)
-                    if conf > max_confidence:
-                        max_confidence = conf
-                        text = ocr_data['text'][i]
-
-            # Only accept the letter if confidence is above a threshold (e.g., 70)
-            if text and max_confidence > 20:
-                row_letters.append(text.strip()[0])  # Take the first character if not empty
+            text = e_easyocr(tile)
+            result = None
+            if len(text) > 0:
+                detected = text[0][1]
+                result = detected[0] if detected else None
+                row_letters.append(result if result else ' ')
             else:
-                row_letters.append('.')  # No valid letter detected for this tile
+                row_letters.append(' ')
+
+
 
             # Optional: Debugging visualization
-            # print(f"Row: {row}, Col: {col}, Letter: {text}, Confidence: {max_confidence}")
             # plt.imshow(tile, cmap='gray')
-            # plt.title(f"Row: {row}, Col: {col}, Letter: {text}, Confidence: {max_confidence}")
+            # plt.title(f"Row: {row}, Col: {col}, Letter: {result}")
+            # plt.axis('off')
             # plt.show()
 
         letter_matrix.append(row_letters)
 
     return letter_matrix
 
-image_path = "/home/s/BW.png"
-image = cv.imread(image_path, cv.IMREAD_GRAYSCALE)
+def enhance_tile(tile):
+    gray_image = cv.cvtColor(tile, cv.COLOR_BGR2GRAY)
+    gray_np = np.array(gray_image)
 
-# Step 1: Enhance Contrast
-image_contrast = cv.convertScaleAbs(image, alpha=1.5, beta=0)
+    _, binary_image = cv.threshold(gray_np, 150, 255, cv.THRESH_BINARY)
 
-# Step 2: Remove Grid Lines
-# Use morphological operations to remove thin lines
-kernel = cv.getStructuringElement(cv.MORPH_RECT, (1, 1))
-no_grid = cv.morphologyEx(image_contrast, cv.MORPH_OPEN, kernel)
+    # 3. Resize the image (upscale for better recognition)
 
-# Step 3: Thresholding
-_, binary_image = cv.threshold(no_grid, 120, 255, cv.THRESH_BINARY)
+    resized_image = cv.resize(binary_image, None, fx=2, fy=2, interpolation=cv.INTER_CUBIC)
 
-# Step 4: Refine Characters with Dilation
-# Dilate the characters to make them bolder
-kernel_dilate = cv.getStructuringElement(cv.MORPH_RECT, (1, 1))
-dilated = cv.dilate(binary_image, kernel_dilate, iterations=1)
+    # 4. Sharpen the image using a kernel
 
-plt.imshow(dilated)
+    kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+
+    sharpened_image = cv.filter2D(resized_image, -1, kernel)
+
+
+    return sharpened_image
+
+
+def e_tesseract(tile):
+    ocr_data = pytesseract.image_to_data(
+        tile,
+        lang='pol',
+        config='--psm 3 -c tessedit_char_whitelist=AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUVWXYZŻŹ',
+        output_type=pytesseract.Output.DICT
+    )
+    # Extract the letter with the highest confidence
+    text = None
+    max_confidence = 0
+    for i, conf in enumerate(ocr_data['conf']):
+        if conf != '-1':  # Exclude empty results
+            conf = int(conf)
+            if conf > max_confidence:
+                max_confidence = conf
+                text = ocr_data['text'][i]
+    result = None
+    if text and max_confidence > 20:
+        result = text.strip()[0]  # Take the first character if not empty
+    return max_confidence, result, text
+
+
+def e_easyocr(tile):
+    result = reader.readtext(tile)
+    return result
+
+
+img = apply_mask(extract_board_image('/home/s/Downloads/IMG_8163.jpeg'))
+plt.imshow(img)
 plt.show()
 
-# matrix = extract_letters_from_board(dilated)
-# for row in matrix:
-#     print(row)
