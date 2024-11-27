@@ -80,8 +80,9 @@ def extract_board_image(path):
         print("No Scrabble board detected.")
 
 def apply_mask(image):
+    # return image
     # Define a color range for the white-ish tiles (tweak these values if needed)
-    lower_white = np.array([200, 200, 200])  # Lower bound for white in HSV
+    lower_white = np.array([150, 150, 150])  # Lower bound for white in HSV
     upper_white = np.array([255, 255, 255])  # Upper bound for white in HSV
 
     # Create a mask for the white-ish areas
@@ -111,10 +112,13 @@ def extract_letters_from_board(image):
             # Preprocess tile (binarization to improve OCR accuracy)
             # _, tile_thresh = cv.threshold(tile, 150, 255, cv.THRESH_BINARY_INV)
 
-            # Use OCR with confidence scores
             text = e_easyocr(tile)
+
             result = None
             if len(text) > 0:
+                print(f'{row}/{col}')
+                for ar, ch, conf in text:
+                    print(f'{ch}/{conf}')
                 detected = text[0][1]
                 result = detected[0] if detected else None
                 row_letters.append(result if result else None)
@@ -139,44 +143,17 @@ def enhance_tile(tile):
 
     _, binary_image = cv.threshold(gray_np, 150, 255, cv.THRESH_BINARY)
 
-    # 3. Resize the image (upscale for better recognition)
-
     resized_image = cv.resize(binary_image, None, fx=2, fy=2, interpolation=cv.INTER_CUBIC)
-
-    # 4. Sharpen the image using a kernel
 
     kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
 
     sharpened_image = cv.filter2D(resized_image, -1, kernel)
 
-
     return sharpened_image
 
 
-def e_tesseract(tile):
-    ocr_data = pytesseract.image_to_data(
-        tile,
-        lang='pol',
-        config='--psm 3 -c tessedit_char_whitelist=AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUVWXYZŻŹ',
-        output_type=pytesseract.Output.DICT
-    )
-    # Extract the letter with the highest confidence
-    text = None
-    max_confidence = 0
-    for i, conf in enumerate(ocr_data['conf']):
-        if conf != '-1':  # Exclude empty results
-            conf = int(conf)
-            if conf > max_confidence:
-                max_confidence = conf
-                text = ocr_data['text'][i]
-    result = None
-    if text and max_confidence > 20:
-        result = text.strip()[0]  # Take the first character if not empty
-    return max_confidence, result, text
-
-
 def e_easyocr(tile):
-    result = reader.readtext(tile)
+    result = reader.readtext(tile, allowlist='AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUVWXYZŻŹ')
     return result
 
 
