@@ -8,14 +8,19 @@ from PIL import Image
 reader = easyocr.Reader(['pl'])
 
 def extract_board_image(path):
-    raw_img = cv.imread(path)
-    img = cv.resize(raw_img, None, fx=0.50, fy=0.50)
+    img = cv.imread(path)
     gray_image = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
-    blurred = cv.GaussianBlur(gray_image, (5, 5), 0)
+    blurred = cv.GaussianBlur(gray_image, (7, 7), 0)
 
+    median_val = np.median(blurred)
+    lower = int(max(0, 0.66 * median_val))
+    upper = int(min(255, 1.33 * median_val))
     # Step 2: Edge Detection using Canny
-    edges = cv.Canny(blurred, 50, 150)  # Tune thresholds if needed
+    edges = cv.Canny(blurred, lower, upper)  # Tune thresholds if needed
+
+    kernel = np.ones((5, 5), np.uint8)
+    edges = cv.dilate(edges, kernel, iterations=1)
 
     # Step 3: Find Contours
     contours, _ = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
@@ -25,7 +30,7 @@ def extract_board_image(path):
     max_area = 0
     for contour in contours:
         # Approximate the contour
-        epsilon = 0.02 * cv.arcLength(contour, True)
+        epsilon = 0.04 * cv.arcLength(contour, True)
         approx = cv.approxPolyDP(contour, epsilon, True)
 
         # Check if it has 4 points and a large enough area
@@ -76,7 +81,7 @@ def extract_board_image(path):
 
 def apply_mask(image):
     # Define a color range for the white-ish tiles (tweak these values if needed)
-    lower_white = np.array([210, 210, 210])  # Lower bound for white in HSV
+    lower_white = np.array([200, 200, 200])  # Lower bound for white in HSV
     upper_white = np.array([255, 255, 255])  # Upper bound for white in HSV
 
     # Create a mask for the white-ish areas
@@ -88,20 +93,19 @@ def apply_mask(image):
 
 
 def extract_letters_from_board(image):
-    # Resize to ensure consistency (e.g., 750x750 pixels for a 15x15 grid)
-    board_size = 750
-    resized = cv.resize(image, (board_size, board_size))
+    height, width, channels = image.shape
 
     # Divide into 15x15 grid
-    grid_size = board_size // 15  # Size of one tile (e.g., 50x50 pixels)
+    grid_h = height // 15
+    grid_w = width // 15
     letter_matrix = []
 
     for row in range(15):
         row_letters = []
         for col in range(15):
             # Extract the tile region
-            x_start, y_start = col * grid_size, row * grid_size
-            tile_raw = resized[y_start:y_start + grid_size, x_start:x_start + grid_size]
+            x_start, y_start = col * grid_w, row * grid_h
+            tile_raw = image[y_start:y_start + grid_h, x_start:x_start + grid_w]
             tile = enhance_tile(tile_raw)
 
             # Preprocess tile (binarization to improve OCR accuracy)
@@ -113,7 +117,7 @@ def extract_letters_from_board(image):
             if len(text) > 0:
                 detected = text[0][1]
                 result = detected[0] if detected else None
-                row_letters.append(result if result else ' ')
+                row_letters.append(result if result else None)
             else:
                 row_letters.append(' ')
 
@@ -176,7 +180,9 @@ def e_easyocr(tile):
     return result
 
 
-img = apply_mask(extract_board_image('/home/s/Downloads/IMG_8163.jpeg'))
-plt.imshow(img)
-plt.show()
+def scan(path):
+    matrix = extract_letters_from_board(apply_mask(extract_board_image(path)))
+    for row in matrix:
+        print(row)
+    return matrix
 
