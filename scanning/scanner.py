@@ -144,7 +144,7 @@ def enhance_tile(tile):
 
 def e_easyocr(tile):
     result = reader.readtext(tile, allowlist='AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUVWXYZŻŹ')
-    if len(result) > 0:
+    if 3 > len(result) > 0:
         first = result[0]
         text, confidence = first[1], first[2]
         if text and len(text) == 1 and confidence > 0.8:
