@@ -1,9 +1,6 @@
 import cv2 as cv
 import numpy as np
-import matplotlib.pyplot as plt
-import pytesseract
 import easyocr
-from PIL import Image
 
 reader = easyocr.Reader(['pl'])
 
@@ -154,8 +151,6 @@ def e_easyocr(tile):
 
 
 def scan(path):
-    matrix = extract_letters_from_board(apply_mask(extract_board_image(path)))
-    for row in matrix:
-        print(row)
-    return matrix
+    return extract_letters_from_board(apply_mask(extract_board_image(path)))
+
 
