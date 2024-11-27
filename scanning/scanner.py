@@ -113,17 +113,7 @@ def extract_letters_from_board(image):
             # _, tile_thresh = cv.threshold(tile, 150, 255, cv.THRESH_BINARY_INV)
 
             text = e_easyocr(tile)
-
-            result = None
-            if len(text) > 0:
-                print(f'{row}/{col}')
-                for ar, ch, conf in text:
-                    print(f'{ch}/{conf}')
-                detected = text[0][1]
-                result = detected[0] if detected else None
-                row_letters.append(result if result else None)
-            else:
-                row_letters.append(' ')
+            row_letters.append(text)
 
 
 
@@ -154,7 +144,13 @@ def enhance_tile(tile):
 
 def e_easyocr(tile):
     result = reader.readtext(tile, allowlist='AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUVWXYZŻŹ')
-    return result
+    if len(result) > 0:
+        first = result[0]
+        text, confidence = first[1], first[2]
+        if text and len(text) == 1 and confidence > 0.8:
+            return text[0]
+    else:
+        return None
 
 
 def scan(path):
