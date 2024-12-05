@@ -1,5 +1,5 @@
 import scanning.visual as vis
 import scanning.scanner as sc
 
-matrix = sc.scan('IMG_8165.jpeg')
+matrix = sc.scan('/home/s/Downloads/IMG_8170.jpeg')
 vis.save(matrix)

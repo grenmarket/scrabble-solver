@@ -1,6 +1,7 @@
 import cv2 as cv
 import numpy as np
 import easyocr
+import matplotlib.pyplot as plt
 
 reader = easyocr.Reader(['pl'])
 
@@ -13,16 +14,16 @@ def extract_board_image(path):
     median_val = np.median(blurred)
     lower = int(max(0, 0.66 * median_val))
     upper = int(min(255, 1.33 * median_val))
-    # Step 2: Edge Detection using Canny
-    edges = cv.Canny(blurred, lower, upper)  # Tune thresholds if needed
+    # Edge Detection using Canny
+    edges = cv.Canny(blurred, lower, upper)
 
     kernel = np.ones((5, 5), np.uint8)
     edges = cv.dilate(edges, kernel, iterations=1)
 
-    # Step 3: Find Contours
+    # Find Contours
     contours, _ = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
-    # Step 4: Find the largest contour that resembles a rectangle
+    # Find the largest contour that resembles a rectangle
     scrabble_board_contour = None
     max_area = 0
     for contour in contours:
@@ -35,7 +36,7 @@ def extract_board_image(path):
             scrabble_board_contour = approx
             max_area = cv.contourArea(approx)
 
-    # Step 5: If a contour is found, apply a perspective transform
+    # If a contour is found, apply a perspective transform
     if scrabble_board_contour is not None:
         # Sort points to ensure correct order (top-left, top-right, bottom-right, bottom-left)
         def order_points(pts):
@@ -77,8 +78,7 @@ def extract_board_image(path):
         print("No Scrabble board detected.")
 
 def apply_mask(image):
-    # return image
-    # Define a color range for the white-ish tiles (tweak these values if needed)
+    # Define a color range for the white-ish tiles
     lower_white = np.array([150, 150, 150])  # Lower bound for white in HSV
     upper_white = np.array([255, 255, 255])  # Upper bound for white in HSV
 
@@ -106,17 +106,14 @@ def extract_letters_from_board(image):
             tile_raw = image[y_start:y_start + grid_h, x_start:x_start + grid_w]
             tile = enhance_tile(tile_raw)
 
-            # Preprocess tile (binarization to improve OCR accuracy)
-            # _, tile_thresh = cv.threshold(tile, 150, 255, cv.THRESH_BINARY_INV)
-
-            text = e_easyocr(tile)
+            text = e_easyocr(tile, row, col)
             row_letters.append(text)
 
 
 
-            # Optional: Debugging visualization
+            # Debugging visualization
             # plt.imshow(tile, cmap='gray')
-            # plt.title(f"Row: {row}, Col: {col}, Letter: {result}")
+            # plt.title(f"Row: {row}, Col: {col}, Letter: {text}")
             # plt.axis('off')
             # plt.show()
 
@@ -139,13 +136,47 @@ def enhance_tile(tile):
     return sharpened_image
 
 
-def e_easyocr(tile):
+def e_easyocr(tile, row, col):
     result = reader.readtext(tile, allowlist='AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUVWXYZŻŹ')
     if 3 > len(result) > 0:
         first = result[0]
         text, confidence = first[1], first[2]
-        if text and len(text) == 1 and confidence > 0.8:
+        if text and len(text) == 1 and confidence > 0.7:
             return text[0]
+    elif len(result) == 0:
+        return determine_if_i(tile, row, col)
+    else:
+        return None
+
+def determine_if_i(tile, row, col):
+    width_ratio = 0.11
+    height_start = 0.2
+    height_end = 0.5
+    black_threshold = 100
+    global_black_threshold = 150
+
+    total_mean_intensity = np.mean(tile)
+    if total_mean_intensity < global_black_threshold:
+        return None
+    print(f'{row}/{col}/{total_mean_intensity}')
+
+    height, width = tile.shape[:2]
+
+    x_start = int(width * (0.5 - width_ratio / 2))
+    x_end = int(width * (0.5 + width_ratio / 2))
+    y_start = int(height * height_start)
+    y_end = int(height * height_end)
+
+    roi = tile[y_start:y_end, x_start:x_end]
+
+    if len(roi.shape) == 3:
+        roi = cv.cvtColor(roi, cv.COLOR_BGR2GRAY)
+
+    mean_intensity = np.mean(roi)
+    print(mean_intensity)
+
+    if mean_intensity < black_threshold:
+        return 'I'
     else:
         return None
 
