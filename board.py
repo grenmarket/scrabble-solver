@@ -1,9 +1,9 @@
 import string
 from collections import defaultdict, namedtuple
+from dataclasses import dataclass
 from typing import List, Dict, Set, Tuple, Optional
 
 
-# Define data structures
 class Tile:
     def __init__(self, letter: str, is_blank: bool = False):
         self.letter = letter.upper() if letter else None
@@ -21,11 +21,34 @@ class BoardSquare:
     def __repr__(self):
         return f"BoardSquare({self.tile}, '{self.premium}')"
 
+@dataclass
+class BoardData:
+    board: List[List[Optional[Tile]]]
+    timestamp: str
+
+    @classmethod
+    def from_dict(cls, data):
+        board = []
+        for row in data['board']:
+            board_row = []
+            for cell in row:
+                if cell is None:
+                    board_row.append(None)
+                else:
+                    board_row.append(Tile(
+                        letter=cell['letter'],
+                        is_blank=cell.get('isBlank', False)
+                    ))
+            board.append(board_row)
+
+        return cls(
+            board=board,
+            timestamp=data['timestamp']
+        )
+
 
 Move = namedtuple('Move', ['row', 'col', 'direction', 'word', 'score'])
 
-
-# GADDAG node structure
 class GADDAGNode:
     def __init__(self):
         self.arcs = {}  # Maps characters to other nodes
