@@ -1,771 +1,1001 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-    }
+    <style>
+        body {
+          font-family: Arial, sans-serif;
+          margin: 20px;
+        }
 
-    .scrabble-container {
-      max-width: 700px;
-      margin: 0 auto;
-    }
+        .scrabble-container {
+          max-width: 950px;
+          margin: 0 auto;
+        }
 
-    .scrabble-board {
-      display: grid;
-      grid-template-columns: repeat(15, 1fr);
-      grid-gap: 1px;
-      background-color: #333;
-      padding: 2px;
-      width: 100%;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    }
+        .board-and-rack {
+          display: flex;
+          gap: 20px;
+          align-items: flex-start;
+        }
 
-    .cell {
-      aspect-ratio: 1/1;
-      background-color: #e5d1b8;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      position: relative;
-      cursor: pointer;
-      font-size: 9px;
-      user-select: none;
-    }
+        .scrabble-board {
+          display: grid;
+          grid-template-columns: repeat(15, 1fr);
+          grid-gap: 1px;
+          background-color: #333;
+          padding: 2px;
+          width: 100%;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
 
-    .cell.dl { background-color: #b3dcf2; }
-    .cell.tl { background-color: #0086c0; }
-    .cell.dw { background-color: #f7bfbf; }
-    .cell.tw { background-color: #e53935; }
+        .scrabble-rack {
+          display: grid;
+          grid-template-columns: repeat(7, 1fr);
+          grid-gap: 1px;
+          background-color: #333;
+          padding: 2px;
+          width: 210px;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
 
-    .tile {
-      width: 90%;
-      height: 90%;
-      background-color: #f5e3b4;
-      border-radius: 2px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-weight: bold;
-      position: relative;
-      box-shadow: 0 2px 3px rgba(0, 0, 0, 0.2);
-    }
+        .rack-title {
+          margin-bottom: 10px;
+          font-weight: bold;
+        }
 
-    .tile-letter {
-      font-size: 16px;
-      text-transform: uppercase;
-    }
+        .cell {
+          aspect-ratio: 1/1;
+          background-color: #e5d1b8;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          position: relative;
+          cursor: pointer;
+          font-size: 9px;
+          user-select: none;
+        }
 
-    .tile-score {
-      position: absolute;
-      right: 3px;
-      bottom: 2px;
-      font-size: 8px;
-    }
+        .rack-cell {
+          aspect-ratio: 1/1;
+          background-color: #8B5A2B;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          position: relative;
+          cursor: pointer;
+          user-select: none;
+        }
 
-    .bonus-text {
-      font-size: 8px;
-      font-weight: bold;
-      color: white;
-      text-transform: uppercase;
-    }
+        .cell.dl { background-color: #b3dcf2; }
+        .cell.tl { background-color: #0086c0; }
+        .cell.dw { background-color: #f7bfbf; }
+        .cell.tw { background-color: #e53935; }
 
-    .dl .bonus-text { color: #0057b8; }
-    .dw .bonus-text { color: #b71c1c; }
+        .tile {
+          width: 90%;
+          height: 90%;
+          background-color: #f5e3b4;
+          border-radius: 2px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          font-weight: bold;
+          position: relative;
+          box-shadow: 0 2px 3px rgba(0, 0, 0, 0.2);
+        }
 
-    .controls {
-      margin: 20px 0;
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
+        .tile-letter {
+          font-size: 16px;
+          text-transform: uppercase;
+        }
 
-    button {
-      padding: 8px 15px;
-      border: none;
-      border-radius: 4px;
-      background-color: #4CAF50;
-      color: white;
-      cursor: pointer;
-      font-weight: bold;
-    }
+        .tile-score {
+          position: absolute;
+          right: 3px;
+          bottom: 2px;
+          font-size: 8px;
+        }
 
-    button:hover {
-      background-color: #45a049;
-    }
+        .bonus-text {
+          font-size: 8px;
+          font-weight: bold;
+          color: white;
+          text-transform: uppercase;
+        }
 
-    #letterSelector {
-      position: absolute;
-      background: white;
-      border: 1px solid #ccc;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-      padding: 10px;
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      grid-gap: 5px;
-      z-index: 100;
-    }
+        .dl .bonus-text { color: #0057b8; }
+        .dw .bonus-text { color: #b71c1c; }
 
-    #letterSelector div {
-      width: 30px;
-      height: 30px;
-      background-color: #f5e3b4;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      cursor: pointer;
-      font-weight: bold;
-      border-radius: 2px;
-      position: relative;
-    }
+        .controls {
+          margin: 20px 0;
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
 
-    #letterSelector div:hover {
-      background-color: #e9d18f;
-    }
+        button {
+          padding: 8px 15px;
+          border: none;
+          border-radius: 4px;
+          background-color: #4CAF50;
+          color: white;
+          cursor: pointer;
+          font-weight: bold;
+        }
 
-    .selector-letter {
-      font-size: 16px;
-    }
+        button:hover {
+          background-color: #45a049;
+        }
 
-    .selector-score {
-      position: absolute;
-      right: 2px;
-      bottom: 1px;
-      font-size: 8px;
-    }
+        #letterSelector {
+          position: absolute;
+          background: white;
+          border: 1px solid #ccc;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+          padding: 10px;
+          display: grid;
+          grid-template-columns: repeat(7, 1fr);
+          grid-gap: 5px;
+          z-index: 100;
+        }
 
-    #blankTileModal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0,0,0,0.5);
-      z-index: 200;
-      justify-content: center;
-      align-items: center;
-    }
+        #letterSelector div {
+          width: 30px;
+          height: 30px;
+          background-color: #f5e3b4;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          cursor: pointer;
+          font-weight: bold;
+          border-radius: 2px;
+          position: relative;
+        }
 
-    .modal-content {
-      background-color: white;
-      padding: 20px;
-      border-radius: 5px;
-      width: 300px;
-    }
+        #letterSelector div:hover {
+          background-color: #e9d18f;
+        }
 
-    #blankTileLetters {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 5px;
-      margin-top: 10px;
-    }
+        .selector-letter {
+          font-size: 16px;
+        }
 
-    .blank-letter-option {
-      background-color: #f0f0f0;
-      padding: 8px;
-      text-align: center;
-      cursor: pointer;
-      border-radius: 3px;
-    }
+        .selector-score {
+          position: absolute;
+          right: 2px;
+          bottom: 1px;
+          font-size: 8px;
+        }
 
-    .blank-letter-option:hover {
-      background-color: #e0e0e0;
-    }
+        #blankTileModal {
+          display: none;
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background-color: rgba(0,0,0,0.5);
+          z-index: 200;
+          justify-content: center;
+          align-items: center;
+        }
 
-    .blank-tile {
-      background-color: #f0f0f0 !important;
-    }
+        .modal-content {
+          background-color: white;
+          padding: 20px;
+          border-radius: 5px;
+          width: 300px;
+        }
 
-    .coords {
-      position: absolute;
-      top: 1px;
-      left: 1px;
-      font-size: 6px;
-      color: #666;
-    }
+        #blankTileLetters {
+          display: grid;
+          grid-template-columns: repeat(7, 1fr);
+          gap: 5px;
+          margin-top: 10px;
+        }
 
-    /* Word Placement Form Styles */
-    .word-placement {
-      background-color: #f5f5f5;
-      padding: 15px;
-      border-radius: 5px;
-      margin-bottom: 20px;
-      border: 1px solid #ddd;
-    }
+        .blank-letter-option {
+          background-color: #f0f0f0;
+          padding: 8px;
+          text-align: center;
+          cursor: pointer;
+          border-radius: 3px;
+        }
 
-    .word-placement-form {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: flex-end;
-    }
+        .blank-letter-option:hover {
+          background-color: #e0e0e0;
+        }
 
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
+        .blank-tile {
+          background-color: #f0f0f0 !important;
+        }
 
-    .form-group label {
-      font-weight: bold;
-      font-size: 14px;
-    }
+        .coords {
+          position: absolute;
+          top: 1px;
+          left: 1px;
+          font-size: 6px;
+          color: #666;
+        }
 
-    .form-group input, .form-group select {
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font-size: 14px;
-    }
+        /* Word Placement Form Styles */
+        .word-placement {
+          background-color: #f5f5f5;
+          padding: 15px;
+          border-radius: 5px;
+          margin-bottom: 20px;
+          border: 1px solid #ddd;
+        }
 
-    .form-group input[type="number"] {
-      width: 60px;
-    }
+        .word-placement-form {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          align-items: flex-end;
+        }
 
-    .form-group input[type="text"] {
-      width: 150px;
-      text-transform: uppercase;
-    }
+        .form-group {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
 
-    .direction-toggle {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
+        .form-group label {
+          font-weight: bold;
+          font-size: 14px;
+        }
 
-    .blank-toggle {
-      display: flex;
-      gap: 10px;
-      margin-top: 10px;
-      align-items: center;
-    }
+        .form-group input, .form-group select {
+          padding: 8px;
+          border: 1px solid #ccc;
+          border-radius: 4px;
+          font-size: 14px;
+        }
 
-    .blank-letters {
-      display: flex;
-      gap: 5px;
-      flex-wrap: wrap;
-    }
+        .form-group input[type="number"] {
+          width: 60px;
+        }
 
-    .blank-toggle label {
-      font-weight: bold;
-      font-size: 14px;
-    }
+        .form-group input[type="text"] {
+          width: 150px;
+          text-transform: uppercase;
+        }
 
-    #blankLettersInput {
-      width: 100px;
-      text-transform: uppercase;
-    }
-  </style>
+        .direction-toggle {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .blank-toggle {
+          display: flex;
+          gap: 10px;
+          margin-top: 10px;
+          align-items: center;
+        }
+
+        .blank-letters {
+          display: flex;
+          gap: 5px;
+          flex-wrap: wrap;
+        }
+
+        .blank-toggle label {
+          font-weight: bold;
+          font-size: 14px;
+        }
+
+        #blankLettersInput {
+          width: 100px;
+          text-transform: uppercase;
+        }
+
+        /* Rack Management Styles */
+        .rack-management {
+          background-color: #f5f5f5;
+          padding: 15px;
+          border-radius: 5px;
+          margin-bottom: 20px;
+          border: 1px solid #ddd;
+        }
+
+        .rack-management h3 {
+          margin-top: 0;
+        }
+
+        .rack-actions {
+          display: flex;
+          gap: 10px;
+          margin-top: 10px;
+        }
+    </style>
 </head>
 <body>
-  <div class="scrabble-container">
+<div class="scrabble-container">
     <h2>Scrabble Board Editor</h2>
 
     <!-- Word Placement Section -->
     <div class="word-placement">
-      <h3>Place Word</h3>
-      <div class="word-placement-form">
-        <div class="form-group">
-          <label for="rowInput">Row (0-14):</label>
-          <input type="number" id="rowInput" min="0" max="14" value="7">
+        <h3>Place Word</h3>
+        <div class="word-placement-form">
+            <div class="form-group">
+                <label for="rowInput">Row (0-14):</label>
+                <input type="number" id="rowInput" min="0" max="14" value="7">
+            </div>
+
+            <div class="form-group">
+                <label for="colInput">Column (0-14):</label>
+                <input type="number" id="colInput" min="0" max="14" value="7">
+            </div>
+
+            <div class="form-group">
+                <label for="wordInput">Word:</label>
+                <input type="text" id="wordInput" placeholder="Enter word">
+            </div>
+
+            <div class="form-group">
+                <label>Direction:</label>
+                <div class="direction-toggle">
+                    <input type="radio" id="horizontal" name="direction" value="horizontal" checked>
+                    <label for="horizontal">Horizontal</label>
+                    <input type="radio" id="vertical" name="direction" value="vertical">
+                    <label for="vertical">Vertical</label>
+                </div>
+            </div>
+
+            <button id="placeWordButton">Place Word</button>
         </div>
 
-        <div class="form-group">
-          <label for="colInput">Column (0-14):</label>
-          <input type="number" id="colInput" min="0" max="14" value="7">
+        <div class="blank-toggle">
+            <label>Blank tiles:</label>
+            <input type="text" id="blankLettersInput" placeholder="e.g. 3,5"
+                   title="Enter positions of blank tiles (0-based, comma separated)">
+            <span style="font-size: 12px; color: #666;">Enter positions of blank tiles (0-based, comma-separated)</span>
         </div>
+    </div>
 
-        <div class="form-group">
-          <label for="wordInput">Word:</label>
-          <input type="text" id="wordInput" placeholder="Enter word">
+    <!-- Rack Management Section -->
+    <div class="rack-management">
+        <h3>Manage Rack</h3>
+        <div class="rack-actions">
+            <button id="clearRackButton">Clear Rack</button>
         </div>
-
-        <div class="form-group">
-          <label>Direction:</label>
-          <div class="direction-toggle">
-            <input type="radio" id="horizontal" name="direction" value="horizontal" checked>
-            <label for="horizontal">Horizontal</label>
-            <input type="radio" id="vertical" name="direction" value="vertical">
-            <label for="vertical">Vertical</label>
-          </div>
-        </div>
-
-        <button id="placeWordButton">Place Word</button>
-      </div>
-
-      <div class="blank-toggle">
-        <label>Blank tiles:</label>
-        <input type="text" id="blankLettersInput" placeholder="e.g. 3,5" title="Enter positions of blank tiles (0-based, comma separated)">
-        <span style="font-size: 12px; color: #666;">Enter positions of blank tiles (0-based, comma-separated)</span>
-      </div>
     </div>
 
     <p>Click on a square to add or edit a tile. Right-click to remove a tile.</p>
 
     <div class="controls">
-      <button id="saveButton">Save Board</button>
-      <button id="clearButton">Clear Board</button>
-      <button id="exportButton">Export JSON</button>
+        <button id="saveButton">Save Board</button>
+        <button id="clearButton">Clear Board</button>
+        <button id="exportButton">Export JSON</button>
     </div>
 
-    <div class="scrabble-board" id="board"></div>
+    <div class="board-and-rack">
+        <div class="scrabble-board" id="board"></div>
+
+        <div class="rack-section">
+            <div class="rack-title">Your Rack</div>
+            <div class="scrabble-rack" id="rack"></div>
+        </div>
+    </div>
 
     <div id="letterSelector"></div>
 
     <div id="blankTileModal">
-      <div class="modal-content">
-        <h3>Select Letter for Blank Tile</h3>
-        <div id="blankTileLetters"></div>
-      </div>
+        <div class="modal-content">
+            <h3>Select Letter for Blank Tile</h3>
+            <div id="blankTileLetters"></div>
+        </div>
     </div>
 
     <div class="controls" style="margin-top: 20px;">
-      <button id="importButton">Import JSON</button>
-      <input type="file" id="importFile" style="display: none;" accept=".json">
+        <button id="importButton">Import JSON</button>
+        <input type="file" id="importFile" style="display: none;" accept=".json">
     </div>
 
-    <pre id="outputJson" style="background: #f5f5f5; padding: 10px; margin-top: 20px; max-height: 200px; overflow: auto; display: none;"></pre>
-  </div>
+    <pre id="outputJson"
+         style="background: #f5f5f5; padding: 10px; margin-top: 20px; max-height: 200px; overflow: auto; display: none;"></pre>
+</div>
 
-  <script>
+<script>
     // Scrabble letter values
-    const letterValues = {
-      'A': 1, 'B': 3, 'C': 3, 'D': 2, 'E': 1, 'F': 4, 'G': 2, 'H': 4, 'I': 1,
-      'J': 8, 'K': 5, 'L': 1, 'M': 3, 'N': 1, 'O': 1, 'P': 3, 'Q': 10, 'R': 1,
-      'S': 1, 'T': 1, 'U': 1, 'V': 4, 'W': 4, 'X': 8, 'Y': 4, 'Z': 10, '_': 0
-    };
+const letterValues = {
+  'A': 1, 'B': 3, 'C': 3, 'D': 2, 'E': 1, 'F': 4, 'G': 2, 'H': 4, 'I': 1,
+  'J': 8, 'K': 5, 'L': 1, 'M': 3, 'N': 1, 'O': 1, 'P': 3, 'Q': 10, 'R': 1,
+  'S': 1, 'T': 1, 'U': 1, 'V': 4, 'W': 4, 'X': 8, 'Y': 4, 'Z': 10, '_': 0
+};
 
-    // Define board special squares
-    const boardSpecials = [
-      ['TW', '', '', 'DL', '', '', '', 'TW', '', '', '', 'DL', '', '', 'TW'],
-      ['', 'DW', '', '', '', 'TL', '', '', '', 'TL', '', '', '', 'DW', ''],
-      ['', '', 'DW', '', '', '', 'DL', '', 'DL', '', '', '', 'DW', '', ''],
-      ['DL', '', '', 'DW', '', '', '', 'DL', '', '', '', 'DW', '', '', 'DL'],
-      ['', '', '', '', 'DW', '', '', '', '', '', 'DW', '', '', '', ''],
-      ['', 'TL', '', '', '', 'TL', '', '', '', 'TL', '', '', '', 'TL', ''],
-      ['', '', 'DL', '', '', '', 'DL', '', 'DL', '', '', '', 'DL', '', ''],
-      ['TW', '', '', 'DL', '', '', '', 'DW', '', '', '', 'DL', '', '', 'TW'],
-      ['', '', 'DL', '', '', '', 'DL', '', 'DL', '', '', '', 'DL', '', ''],
-      ['', 'TL', '', '', '', 'TL', '', '', '', 'TL', '', '', '', 'TL', ''],
-      ['', '', '', '', 'DW', '', '', '', '', '', 'DW', '', '', '', ''],
-      ['DL', '', '', 'DW', '', '', '', 'DL', '', '', '', 'DW', '', '', 'DL'],
-      ['', '', 'DW', '', '', '', 'DL', '', 'DL', '', '', '', 'DW', '', ''],
-      ['', 'DW', '', '', '', 'TL', '', '', '', 'TL', '', '', '', 'DW', ''],
-      ['TW', '', '', 'DL', '', '', '', 'TW', '', '', '', 'DL', '', '', 'TW']
-    ];
+// Define board special squares
+const boardSpecials = [
+  ['TW', '', '', 'DL', '', '', '', 'TW', '', '', '', 'DL', '', '', 'TW'],
+  ['', 'DW', '', '', '', 'TL', '', '', '', 'TL', '', '', '', 'DW', ''],
+  ['', '', 'DW', '', '', '', 'DL', '', 'DL', '', '', '', 'DW', '', ''],
+  ['DL', '', '', 'DW', '', '', '', 'DL', '', '', '', 'DW', '', '', 'DL'],
+  ['', '', '', '', 'DW', '', '', '', '', '', 'DW', '', '', '', ''],
+  ['', 'TL', '', '', '', 'TL', '', '', '', 'TL', '', '', '', 'TL', ''],
+  ['', '', 'DL', '', '', '', 'DL', '', 'DL', '', '', '', 'DL', '', ''],
+  ['TW', '', '', 'DL', '', '', '', 'DW', '', '', '', 'DL', '', '', 'TW'],
+  ['', '', 'DL', '', '', '', 'DL', '', 'DL', '', '', '', 'DL', '', ''],
+  ['', 'TL', '', '', '', 'TL', '', '', '', 'TL', '', '', '', 'TL', ''],
+  ['', '', '', '', 'DW', '', '', '', '', '', 'DW', '', '', '', ''],
+  ['DL', '', '', 'DW', '', '', '', 'DL', '', '', '', 'DW', '', '', 'DL'],
+  ['', '', 'DW', '', '', '', 'DL', '', 'DL', '', '', '', 'DW', '', ''],
+  ['', 'DW', '', '', '', 'TL', '', '', '', 'TL', '', '', '', 'DW', ''],
+  ['TW', '', '', 'DL', '', '', '', 'TW', '', '', '', 'DL', '', '', 'TW']
+];
 
-    // Initialize board state
-    let boardState = Array(15).fill().map(() => Array(15).fill(null));
-    let currentCell = null;
-    let isBlankTileMode = false;
-    let blankTileCellRef = null;
+// Initialize board and rack states
+let boardState = Array(15).fill().map(() => Array(15).fill(null));
+let rackState = Array(7).fill(null);
+let currentCell = null;
+let isBlankTileMode = false;
+let blankTileCellRef = null;
+let currentRackIndex = null; // For tracking rack operations
 
-    // Create the board UI
-    const board = document.getElementById('board');
+// Create the board UI
+const board = document.getElementById('board');
 
-    for (let row = 0; row < 15; row++) {
-      for (let col = 0; col < 15; col++) {
-        const cell = document.createElement('div');
-        cell.className = 'cell';
-        cell.dataset.row = row;
-        cell.dataset.col = col;
+for (let row = 0; row < 15; row++) {
+  for (let col = 0; col < 15; col++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.dataset.row = row;
+    cell.dataset.col = col;
 
-        // Add coordinates
-        const coords = document.createElement('div');
-        coords.className = 'coords';
-        coords.textContent = `${row},${col}`;
-        cell.appendChild(coords);
+    // Add coordinates
+    const coords = document.createElement('div');
+    coords.className = 'coords';
+    coords.textContent = `${row},${col}`;
+    cell.appendChild(coords);
 
-        // Add special cell classes
-        const special = boardSpecials[row][col];
-        if (special) {
-          cell.classList.add(special.toLowerCase());
-          const bonusText = document.createElement('div');
-          bonusText.className = 'bonus-text';
-          bonusText.textContent = special;
-          cell.appendChild(bonusText);
-        }
-
-        // Add click events
-        cell.addEventListener('click', handleCellClick);
-        cell.addEventListener('contextmenu', function(e) {
-          e.preventDefault();
-          removeTile(row, col);
-          return false;
-        });
-
-        board.appendChild(cell);
-      }
+    // Add special cell classes
+    const special = boardSpecials[row][col];
+    if (special) {
+      cell.classList.add(special.toLowerCase());
+      const bonusText = document.createElement('div');
+      bonusText.className = 'bonus-text';
+      bonusText.textContent = special;
+      cell.appendChild(bonusText);
     }
 
-    // Create letter selector
-    const letterSelector = document.getElementById('letterSelector');
-    letterSelector.style.display = 'none';
-
-    // Populate letter selector
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
-    for (let i = 0; i < letters.length; i++) {
-      const letter = letters[i];
-      const letterDiv = document.createElement('div');
-
-      const letterSpan = document.createElement('span');
-      letterSpan.className = 'selector-letter';
-      letterSpan.textContent = letter;
-      letterDiv.appendChild(letterSpan);
-
-      const scoreSpan = document.createElement('span');
-      scoreSpan.className = 'selector-score';
-      scoreSpan.textContent = letterValues[letter];
-      letterDiv.appendChild(scoreSpan);
-
-      letterDiv.addEventListener('click', function() {
-        if (letter === '_') {
-          isBlankTileMode = true;
-          showBlankTileModal();
-        } else {
-          placeTile(currentCell.dataset.row, currentCell.dataset.col, letter, false);
-          hideLetterSelector();
-        }
-      });
-
-      letterSelector.appendChild(letterDiv);
-    }
-
-    // Create blank tile modal
-    const blankTileModal = document.getElementById('blankTileModal');
-    const blankTileLetters = document.getElementById('blankTileLetters');
-
-    // Populate blank tile letter options
-    for (let i = 0; i < 26; i++) {
-      const letter = letters[i];
-      const letterOption = document.createElement('div');
-      letterOption.className = 'blank-letter-option';
-      letterOption.textContent = letter;
-
-      letterOption.addEventListener('click', function() {
-        placeTile(blankTileCellRef.dataset.row, blankTileCellRef.dataset.col, letter, true);
-        hideBlankTileModal();
-        hideLetterSelector();
-        isBlankTileMode = false;
-      });
-
-      blankTileLetters.appendChild(letterOption);
-    }
-
-    // Handle cell click
-    function handleCellClick(e) {
-      currentCell = e.currentTarget;
-      const rect = currentCell.getBoundingClientRect();
-
-      // Position letter selector
-      letterSelector.style.left = `${rect.left}px`;
-      letterSelector.style.top = `${rect.bottom + 5}px`;
-      letterSelector.style.display = 'grid';
-
-      // Close letter selector when clicking outside
-      document.addEventListener('click', function closeSelector(e) {
-        if (!letterSelector.contains(e.target) && !currentCell.contains(e.target)) {
-          hideLetterSelector();
-          document.removeEventListener('click', closeSelector);
-        }
-      });
-    }
-
-    // Show blank tile modal
-    function showBlankTileModal() {
-      blankTileCellRef = currentCell;
-      blankTileModal.style.display = 'flex';
-
-      // Close modal when clicking outside
-      document.addEventListener('click', function closeModal(e) {
-        if (!blankTileModal.contains(e.target) && !currentCell.contains(e.target) &&
-            !letterSelector.contains(e.target)) {
-          hideBlankTileModal();
-          document.removeEventListener('click', closeModal);
-        }
-      });
-    }
-
-    // Hide blank tile modal
-    function hideBlankTileModal() {
-      blankTileModal.style.display = 'none';
-    }
-
-    // Hide letter selector
-    function hideLetterSelector() {
-      letterSelector.style.display = 'none';
-    }
-
-    // Place tile on board
-    function placeTile(row, col, letter, isBlank) {
-      row = parseInt(row);
-      col = parseInt(col);
-
-      // Make sure coordinates are valid
-      if (row < 0 || row > 14 || col < 0 || col > 14) {
-        return;
-      }
-
-      // Update board state
-      boardState[row][col] = {
-        letter: letter,
-        isBlank: isBlank
-      };
-
-      // Update UI
-      const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
-
-      // Remove any existing tile
-      const existingTile = cell.querySelector('.tile');
-      if (existingTile) {
-        cell.removeChild(existingTile);
-      }
-
-      // Create new tile
-      const tile = document.createElement('div');
-      tile.className = 'tile';
-      if (isBlank) {
-        tile.classList.add('blank-tile');
-      }
-
-      const letterSpan = document.createElement('div');
-      letterSpan.className = 'tile-letter';
-      letterSpan.textContent = letter;
-      tile.appendChild(letterSpan);
-
-      if (!isBlank) {
-        const scoreSpan = document.createElement('div');
-        scoreSpan.className = 'tile-score';
-        scoreSpan.textContent = letterValues[letter];
-        tile.appendChild(scoreSpan);
-      }
-
-      cell.appendChild(tile);
-    }
-
-    // Remove tile from board
-    function removeTile(row, col) {
-      row = parseInt(row);
-      col = parseInt(col);
-
-      // Update board state
-      boardState[row][col] = null;
-
-      // Update UI
-      const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
-      const existingTile = cell.querySelector('.tile');
-      if (existingTile) {
-        cell.removeChild(existingTile);
-      }
-    }
-
-    // Save board to JSON
-    document.getElementById('exportButton').addEventListener('click', function() {
-      const output = document.getElementById('outputJson');
-
-      // Create data structure
-      const boardData = {
-        board: Array(15).fill().map(() => Array(15).fill(null)),
-        timestamp: new Date().toISOString()
-      };
-
-      // Fill data
-      for (let row = 0; row < 15; row++) {
-        for (let col = 0; col < 15; col++) {
-          if (boardState[row][col]) {
-            boardData.board[row][col] = {
-              letter: boardState[row][col].letter,
-              isBlank: boardState[row][col].isBlank || false
-            };
-          }
-        }
-      }
-
-      // Display JSON
-      const json = JSON.stringify(boardData, null, 2);
-      output.textContent = json;
-      output.style.display = 'block';
-
-      // Copy to clipboard
-      navigator.clipboard.writeText(json)
-        .then(() => {
-          alert('Board data copied to clipboard!');
-        })
-        .catch(err => {
-          console.error('Failed to copy: ', err);
-        });
+    // Add click events
+    cell.addEventListener('click', handleCellClick);
+    cell.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      removeTile(row, col);
+      return false;
     });
 
-    // Import JSON
-    document.getElementById('importButton').addEventListener('click', function() {
-      document.getElementById('importFile').click();
-    });
+    board.appendChild(cell);
+  }
+}
 
-    document.getElementById('importFile').addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
+// Create the rack UI
+const rack = document.getElementById('rack');
 
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          const data = JSON.parse(e.target.result);
-          importBoardData(data);
-        } catch (err) {
-          alert('Error parsing JSON file: ' + err.message);
-        }
+for (let i = 0; i < 7; i++) {
+  const cell = document.createElement('div');
+  cell.className = 'rack-cell';
+  cell.dataset.index = i;
+
+  // Add click events for rack
+  cell.addEventListener('click', handleRackClick);
+  cell.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    removeRackTile(i);
+    return false;
+  });
+
+  rack.appendChild(cell);
+}
+
+// Create letter selector
+const letterSelector = document.getElementById('letterSelector');
+letterSelector.style.display = 'none';
+
+// Populate letter selector
+const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
+for (let i = 0; i < letters.length; i++) {
+  const letter = letters[i];
+  const letterDiv = document.createElement('div');
+
+  const letterSpan = document.createElement('span');
+  letterSpan.className = 'selector-letter';
+  letterSpan.textContent = letter;
+  letterDiv.appendChild(letterSpan);
+
+  const scoreSpan = document.createElement('span');
+  scoreSpan.className = 'selector-score';
+  scoreSpan.textContent = letterValues[letter];
+  letterDiv.appendChild(scoreSpan);
+
+  letterDiv.addEventListener('click', function() {
+    if (letter === '_') {
+      isBlankTileMode = true;
+      showBlankTileModal();
+    } else {
+      if (currentRackIndex !== null) {
+        placeRackTile(currentRackIndex, letter, false);
+      } else if (currentCell) {
+        placeTile(currentCell.dataset.row, currentCell.dataset.col, letter, false);
+      }
+      hideLetterSelector();
+      currentRackIndex = null;
+    }
+  });
+
+  letterSelector.appendChild(letterDiv);
+}
+
+// Create blank tile modal
+const blankTileModal = document.getElementById('blankTileModal');
+const blankTileLetters = document.getElementById('blankTileLetters');
+
+// Populate blank tile letter options
+for (let i = 0; i < 26; i++) {
+  const letter = letters[i];
+  const letterOption = document.createElement('div');
+  letterOption.className = 'blank-letter-option';
+  letterOption.textContent = letter;
+
+  letterOption.addEventListener('click', function() {
+    if (currentRackIndex !== null) {
+      placeRackTile(currentRackIndex, letter, true);
+      currentRackIndex = null;
+    } else if (blankTileCellRef) {
+      placeTile(blankTileCellRef.dataset.row, blankTileCellRef.dataset.col, letter, true);
+    }
+    hideBlankTileModal();
+    hideLetterSelector();
+    isBlankTileMode = false;
+  });
+
+  blankTileLetters.appendChild(letterOption);
+}
+
+// Handle cell click
+function handleCellClick(e) {
+  currentCell = e.currentTarget;
+  currentRackIndex = null;
+  const rect = currentCell.getBoundingClientRect();
+
+  // Position letter selector
+  letterSelector.style.left = `${rect.left}px`;
+  letterSelector.style.top = `${rect.bottom + 5}px`;
+  letterSelector.style.display = 'grid';
+
+  // Close letter selector when clicking outside
+  document.addEventListener('click', function closeSelector(e) {
+    if (!letterSelector.contains(e.target) && !currentCell.contains(e.target)) {
+      hideLetterSelector();
+      document.removeEventListener('click', closeSelector);
+    }
+  });
+}
+
+// Handle rack cell click
+function handleRackClick(e) {
+  currentRackIndex = parseInt(e.currentTarget.dataset.index);
+  currentCell = null;
+  const rect = e.currentTarget.getBoundingClientRect();
+
+  // Position letter selector
+  letterSelector.style.left = `${rect.left}px`;
+  letterSelector.style.top = `${rect.bottom + 5}px`;
+  letterSelector.style.display = 'grid';
+
+  // Close letter selector when clicking outside
+  document.addEventListener('click', function closeSelector(e) {
+    if (!letterSelector.contains(e.target) && !e.currentTarget.contains(e.target)) {
+      hideLetterSelector();
+      document.removeEventListener('click', closeSelector);
+    }
+  });
+}
+
+// Show blank tile modal
+function showBlankTileModal() {
+  if (currentRackIndex !== null) {
+    blankTileCellRef = null;
+  } else {
+    blankTileCellRef = currentCell;
+  }
+  blankTileModal.style.display = 'flex';
+
+  // Close modal when clicking outside
+  document.addEventListener('click', function closeModal(e) {
+    if (!blankTileModal.contains(e.target) &&
+        ((!currentCell || !currentCell.contains(e.target)) &&
+         !letterSelector.contains(e.target))) {
+      hideBlankTileModal();
+      document.removeEventListener('click', closeModal);
+    }
+  });
+}
+
+// Hide blank tile modal
+function hideBlankTileModal() {
+  blankTileModal.style.display = 'none';
+}
+
+// Hide letter selector
+function hideLetterSelector() {
+  letterSelector.style.display = 'none';
+}
+
+// Place tile on board
+function placeTile(row, col, letter, isBlank) {
+  row = parseInt(row);
+  col = parseInt(col);
+
+  // Make sure coordinates are valid
+  if (row < 0 || row > 14 || col < 0 || col > 14) {
+    return;
+  }
+
+  // Update board state
+  boardState[row][col] = {
+    letter: letter,
+    isBlank: isBlank
+  };
+
+  // Update UI
+  const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+
+  // Remove any existing tile
+  const existingTile = cell.querySelector('.tile');
+  if (existingTile) {
+    cell.removeChild(existingTile);
+  }
+
+  // Create new tile
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+  if (isBlank) {
+    tile.classList.add('blank-tile');
+  }
+
+  const letterSpan = document.createElement('div');
+  letterSpan.className = 'tile-letter';
+  letterSpan.textContent = letter;
+  tile.appendChild(letterSpan);
+
+  if (!isBlank) {
+    const scoreSpan = document.createElement('div');
+    scoreSpan.className = 'tile-score';
+    scoreSpan.textContent = letterValues[letter];
+    tile.appendChild(scoreSpan);
+  }
+
+  cell.appendChild(tile);
+}
+
+// Place tile on rack
+function placeRackTile(index, letter, isBlank) {
+  index = parseInt(index);
+
+  // Make sure index is valid
+  if (index < 0 || index > 6) {
+    return;
+  }
+
+  // Update rack state
+  rackState[index] = {
+    letter: letter,
+    isBlank: isBlank
+  };
+
+  // Update UI
+  const cell = document.querySelector(`.rack-cell[data-index="${index}"]`);
+
+  // Remove any existing tile
+  const existingTile = cell.querySelector('.tile');
+  if (existingTile) {
+    cell.removeChild(existingTile);
+  }
+
+  // Create new tile
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+  if (isBlank) {
+    tile.classList.add('blank-tile');
+  }
+
+  const letterSpan = document.createElement('div');
+  letterSpan.className = 'tile-letter';
+  letterSpan.textContent = letter;
+  tile.appendChild(letterSpan);
+
+  if (!isBlank) {
+    const scoreSpan = document.createElement('div');
+    scoreSpan.className = 'tile-score';
+    scoreSpan.textContent = letterValues[letter];
+    tile.appendChild(scoreSpan);
+  }
+
+  cell.appendChild(tile);
+}
+
+// Remove tile from board
+function removeTile(row, col) {
+  row = parseInt(row);
+  col = parseInt(col);
+
+  // Update board state
+  boardState[row][col] = null;
+
+  // Update UI
+  const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+  const existingTile = cell.querySelector('.tile');
+  if (existingTile) {
+    cell.removeChild(existingTile);
+  }
+}
+
+// Remove tile from rack
+function removeRackTile(index) {
+  index = parseInt(index);
+
+  // Update rack state
+  rackState[index] = null;
+
+  // Update UI
+  const cell = document.querySelector(`.rack-cell[data-index="${index}"]`);
+  const existingTile = cell.querySelector('.tile');
+  if (existingTile) {
+    cell.removeChild(existingTile);
+  }
+}
+
+// Clear rack
+document.getElementById('clearRackButton').addEventListener('click', clearRack);
+
+function clearRack() {
+  rackState = Array(7).fill(null);
+
+  // Clear all rack tiles in the UI
+  const rackCells = document.querySelectorAll('.rack-cell');
+  rackCells.forEach(cell => {
+    const existingTile = cell.querySelector('.tile');
+    if (existingTile) {
+      cell.removeChild(existingTile);
+    }
+  });
+}
+
+// Save board to JSON
+document.getElementById('exportButton').addEventListener('click', function() {
+  const output = document.getElementById('outputJson');
+
+  // Create data structure
+  const boardData = {
+    board: Array(15).fill().map(() => Array(15).fill(null)),
+    rack: Array(7).fill(null),
+    timestamp: new Date().toISOString()
+  };
+
+  // Fill board data
+  for (let row = 0; row < 15; row++) {
+    for (let col = 0; col < 15; col++) {
+      if (boardState[row][col]) {
+        boardData.board[row][col] = {
+          letter: boardState[row][col].letter,
+          isBlank: boardState[row][col].isBlank || false
+        };
+      }
+    }
+  }
+
+  // Fill rack data
+  for (let i = 0; i < 7; i++) {
+    if (rackState[i]) {
+      boardData.rack[i] = {
+        letter: rackState[i].letter,
+        isBlank: rackState[i].isBlank || false
       };
-      reader.readAsText(file);
-    });
+    }
+  }
 
-    // Import board data
-    function importBoardData(data) {
-      if (!data.board || !Array.isArray(data.board) || data.board.length !== 15) {
-        alert('Invalid board data format');
+  // Display JSON
+  const json = JSON.stringify(boardData, null, 2);
+  output.textContent = json;
+  output.style.display = 'block';
+
+  // Copy to clipboard
+  navigator.clipboard.writeText(json)
+    .then(() => {
+      alert('Board data copied to clipboard!');
+    })
+    .catch(err => {
+      console.error('Failed to copy: ', err);
+    });
+});
+
+// Clear board
+document.getElementById('clearButton').addEventListener('click', clearBoard);
+
+function clearBoard() {
+  boardState = Array(15).fill().map(() => Array(15).fill(null));
+
+  // Update UI - only clear board tiles, not rack tiles
+  const boardTiles = document.querySelectorAll('.cell .tile');
+  boardTiles.forEach(tile => {
+    tile.parentNode.removeChild(tile);
+  });
+
+  document.getElementById('outputJson').style.display = 'none';
+}
+
+// Word Placement Feature
+document.getElementById('placeWordButton').addEventListener('click', placeWord);
+
+function placeWord() {
+  const startRow = parseInt(document.getElementById('rowInput').value);
+  const startCol = parseInt(document.getElementById('colInput').value);
+  let word = document.getElementById('wordInput').value.toUpperCase();
+  const direction = document.querySelector('input[name="direction"]:checked').value;
+  const blankLettersInput = document.getElementById('blankLettersInput').value.trim();
+
+  // Validate inputs
+  if (word.length === 0) {
+    alert('Please enter a word');
+    return;
+  }
+
+  if (isNaN(startRow) || startRow < 0 || startRow > 14 ||
+      isNaN(startCol) || startCol < 0 || startCol > 14) {
+    alert('Please enter valid row and column (0-14)');
+    return;
+  }
+
+  // Parse blank tiles positions
+  let blankPositions = [];
+  if (blankLettersInput) {
+    blankPositions = blankLettersInput.split(',').map(pos => parseInt(pos.trim()));
+
+    // Validate blank positions
+    for (const pos of blankPositions) {
+      if (isNaN(pos) || pos < 0 || pos >= word.length) {
+        alert(`Invalid blank tile position: ${pos}. Must be between 0 and ${word.length - 1}`);
         return;
       }
+    }
+  }
 
-      // Clear the board first
-      clearBoard();
+  // Check if word fits on board
+  let fitsOnBoard = true;
+  if (direction === 'horizontal') {
+    fitsOnBoard = (startCol + word.length - 1) <= 14;
+  } else {
+    fitsOnBoard = (startRow + word.length - 1) <= 14;
+  }
 
-      // Place tiles
-      for (let row = 0; row < 15; row++) {
-        for (let col = 0; col < 15; col++) {
-          const tile = data.board[row][col];
-          if (tile && tile.letter) {
-            placeTile(row, col, tile.letter, tile.isBlank || false);
-          }
-        }
+  if (!fitsOnBoard) {
+    alert('Word does not fit on the board with the given starting position and direction');
+    return;
+  }
+
+  // Place the word on the board
+  for (let i = 0; i < word.length; i++) {
+    const letter = word[i];
+    const isBlank = blankPositions.includes(i);
+
+    if (direction === 'horizontal') {
+      placeTile(startRow, startCol + i, letter, isBlank);
+    } else {
+      placeTile(startRow + i, startCol, letter, isBlank);
+    }
+  }
+
+  // Clear the word input for convenience
+  document.getElementById('wordInput').value = '';
+  document.getElementById('blankLettersInput').value = '';
+}
+
+// Import JSON
+document.getElementById('importButton').addEventListener('click', function() {
+  document.getElementById('importFile').click();
+});
+
+document.getElementById('importFile').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      importBoardData(data);
+    } catch (err) {
+      alert('Error parsing JSON file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+// Import board data
+function importBoardData(data) {
+  if (!data.board || !Array.isArray(data.board) || data.board.length !== 15) {
+    alert('Invalid board data format');
+    return;
+  }
+
+  // Clear the board first
+  clearBoard();
+
+  // Clear the rack
+  clearRack();
+
+  // Place board tiles
+  for (let row = 0; row < 15; row++) {
+    for (let col = 0; col < 15; col++) {
+      const tile = data.board[row][col];
+      if (tile && tile.letter) {
+        placeTile(row, col, tile.letter, tile.isBlank || false);
       }
     }
+  }
 
-    // Save board (simulated REST call)
-    document.getElementById('saveButton').addEventListener('click', function() {
-      // Create data structure
-      const boardData = {
-        board: Array(15).fill().map(() => Array(15).fill(null)),
-        timestamp: new Date().toISOString()
+  // Place rack tiles if they exist
+  if (data.rack && Array.isArray(data.rack)) {
+    for (let i = 0; i < Math.min(data.rack.length, 7); i++) {
+      const tile = data.rack[i];
+      if (tile && tile.letter) {
+        placeRackTile(i, tile.letter, tile.isBlank || false);
+      }
+    }
+  }
+}
+
+// Save board (real REST call)
+document.getElementById('saveButton').addEventListener('click', function() {
+  // Create data structure
+  const boardData = {
+    board: Array(15).fill().map(() => Array(15).fill(null)),
+    rack: Array(7).fill(null),
+    timestamp: new Date().toISOString()
+  };
+
+  // Fill board data
+  for (let row = 0; row < 15; row++) {
+    for (let col = 0; col < 15; col++) {
+      if (boardState[row][col]) {
+        boardData.board[row][col] = {
+          letter: boardState[row][col].letter,
+          isBlank: boardState[row][col].isBlank || false
+        };
+      }
+    }
+  }
+
+  // Fill rack data
+  for (let i = 0; i < 7; i++) {
+    if (rackState[i]) {
+      boardData.rack[i] = {
+        letter: rackState[i].letter,
+        isBlank: rackState[i].isBlank || false
       };
+    }
+  }
 
-      // Fill data
-      for (let row = 0; row < 15; row++) {
-        for (let col = 0; col < 15; col++) {
-          if (boardState[row][col]) {
-            boardData.board[row][col] = {
-              letter: boardState[row][col].letter,
-              isBlank: boardState[row][col].isBlank || false
-            };
-          }
-        }
-      }
-
-      // Simulate REST call
-      console.log('Saving board data:', boardData);
-
-      // This would be replaced with an actual fetch call to your API
-      /*
-      fetch('https://your-api.com/scrabble/board', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(boardData),
-      })
-      .then(response => response.json())
-      .then(data => {
-        console.log('Success:', data);
-        alert('Board saved successfully!');
-      })
-      .catch((error) => {
-        console.error('Error:', error);
-        alert('Error saving board: ' + error.message);
-      });
-      */
-
-      alert('Board ready to save! Check console for data structure.');
+  // Make the actual REST call
+  fetch('/board', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(boardData),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Success:', data);
+    alert('Board data sent successfully!');
+  })
+  .catch((error) => {
+    console.error('Error:', error);
+    alert('Error saving board: ' + error.message);
+  });
     });
-
-    // Clear board
-    document.getElementById('clearButton').addEventListener('click', clearBoard);
-
-    function clearBoard() {
-      boardState = Array(15).fill().map(() => Array(15).fill(null));
-
-      // Update UI
-      const tiles = document.querySelectorAll('.tile');
-      tiles.forEach(tile => {
-        tile.parentNode.removeChild(tile);
-      });
-
-      document.getElementById('outputJson').style.display = 'none';
-    }
-
-    // Word Placement Feature
-    document.getElementById('placeWordButton').addEventListener('click', placeWord);
-
-    function placeWord() {
-      const startRow = parseInt(document.getElementById('rowInput').value);
-      const startCol = parseInt(document.getElementById('colInput').value);
-      let word = document.getElementById('wordInput').value.toUpperCase();
-      const direction = document.querySelector('input[name="direction"]:checked').value;
-      const blankLettersInput = document.getElementById('blankLettersInput').value.trim();
-
-      // Validate inputs
-      if (word.length === 0) {
-        alert('Please enter a word');
-        return;
-      }
-
-      if (isNaN(startRow) || startRow < 0 || startRow > 14 ||
-          isNaN(startCol) || startCol < 0 || startCol > 14) {
-        alert('Please enter valid row and column (0-14)');
-        return;
-      }
-
-      // Parse blank tiles positions
-      let blankPositions = [];
-      if (blankLettersInput) {
-        blankPositions = blankLettersInput.split(',').map(pos => parseInt(pos.trim()));
-
-        // Validate blank positions
-        for (const pos of blankPositions) {
-          if (isNaN(pos) || pos < 0 || pos >= word.length) {
-            alert(`Invalid blank tile position: ${pos}. Must be between 0 and ${word.length - 1}`);
-            return;
-          }
-        }
-      }
-
-      // Check if word fits on board
-      let fitsOnBoard = true;
-      if (direction === 'horizontal') {
-        fitsOnBoard = (startCol + word.length - 1) <= 14;
-      } else {
-        fitsOnBoard = (startRow + word.length - 1) <= 14;
-      }
-
-      if (!fitsOnBoard) {
-        alert('Word does not fit on the board with the given starting position and direction');
-        return;
-      }
-
-      // Place the word on the board
-      for (let i = 0; i < word.length; i++) {
-        const letter = word[i];
-        const isBlank = blankPositions.includes(i);
-
-        if (direction === 'horizontal') {
-          placeTile(startRow, startCol + i, letter, isBlank);
-        } else {
-          placeTile(startRow + i, startCol, letter, isBlank);
-        }
-      }
-
-      // Clear the word input for convenience
-      document.getElementById('wordInput').value = '';
-      document.getElementById('blankLettersInput').value = '';
-    }
-  </script>
+</script>
 </body>
 </html>
