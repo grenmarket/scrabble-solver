@@ -308,6 +308,66 @@
           gap: 10px;
           margin-top: 10px;
         }
+
+.rack-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Top Moves Section Styles - update width */
+.top-moves-section {
+  margin-top: 0; /* Remove top margin since it's now positioned below with gap */
+  width: 210px;
+}
+
+.top-moves-title {
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+.top-moves-list {
+  background-color: #f5f5f5;
+  border-radius: 5px;
+  border: 1px solid #ddd;
+  padding: 10px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.move-item {
+  padding: 8px;
+  border-bottom: 1px solid #ddd;
+  font-size: 14px;
+}
+
+.move-item:last-child {
+  border-bottom: none;
+}
+
+.move-word {
+  font-weight: bold;
+}
+
+.move-score {
+  float: right;
+  font-weight: bold;
+  color: #4CAF50;
+}
+
+.move-position {
+  display: block;
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.empty-moves-msg {
+  color: #999;
+  font-style: italic;
+  text-align: center;
+  padding: 10px;
+}
     </style>
 </head>
 <body>
@@ -373,9 +433,20 @@
     <div class="board-and-rack">
         <div class="scrabble-board" id="board"></div>
 
-        <div class="rack-section">
-            <div class="rack-title">Your Rack</div>
-            <div class="scrabble-rack" id="rack"></div>
+        <div class="rack-container">
+            <div class="rack-section">
+                <div class="rack-title">Your Rack</div>
+                <div class="scrabble-rack" id="rack"></div>
+            </div>
+
+            <!-- Now positioned below the rack -->
+            <div class="top-moves-section">
+                <div class="top-moves-title">Best Moves</div>
+                <div class="top-moves-list" id="topMovesList">
+                    <!-- Will be populated by JavaScript -->
+                    <div class="empty-moves-msg">Submit board to see best moves</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -978,8 +1049,11 @@ document.getElementById('saveButton').addEventListener('click', function() {
     }
   }
 
+  const topMovesList = document.getElementById('topMovesList');
+  topMovesList.innerHTML = '<div class="empty-moves-msg">Loading best moves...</div>';
+
   // Make the actual REST call
-  fetch('/board', {
+  fetch('http://localhost:8085/board', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -989,13 +1063,53 @@ document.getElementById('saveButton').addEventListener('click', function() {
   .then(response => response.json())
   .then(data => {
     console.log('Success:', data);
+    displayTopMoves(data.top_moves);
     alert('Board data sent successfully!');
   })
   .catch((error) => {
     console.error('Error:', error);
+    topMovesList.innerHTML = '<div class="empty-moves-msg">Error fetching moves</div>';
     alert('Error saving board: ' + error.message);
   });
     });
+
+    function displayTopMoves(moves) {
+  const topMovesList = document.getElementById('topMovesList');
+
+  // Clear current content
+  topMovesList.innerHTML = '';
+
+  if (!moves || moves.length === 0) {
+    topMovesList.innerHTML = '<div class="empty-moves-msg">No valid moves found</div>';
+    return;
+  }
+
+  // Add each move to the list
+  moves.forEach(move => {
+    const moveDiv = document.createElement('div');
+    moveDiv.className = 'move-item';
+
+    // Create word span with score
+    const wordSpan = document.createElement('span');
+    wordSpan.className = 'move-word';
+    wordSpan.textContent = move.word;
+    moveDiv.appendChild(wordSpan);
+
+    // Create score span
+    const scoreSpan = document.createElement('span');
+    scoreSpan.className = 'move-score';
+    scoreSpan.textContent = move.score + ' pts';
+    moveDiv.appendChild(scoreSpan);
+
+    // Create position info
+    const positionSpan = document.createElement('span');
+    positionSpan.className = 'move-position';
+    positionSpan.textContent = `${move.row},${move.col} (${move.direction})`;
+    moveDiv.appendChild(positionSpan);
+
+    topMovesList.appendChild(moveDiv);
+  });
+}
 </script>
 </body>
 </html>
