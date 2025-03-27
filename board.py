@@ -1,8 +1,8 @@
 import string
-from collections import defaultdict, namedtuple
-from dataclasses import dataclass
-from typing import List, Dict, Set, Tuple, Optional
+from collections import namedtuple
+from typing import List, Set, Tuple, Optional
 
+Move = namedtuple('Move', ['row', 'col', 'direction', 'word', 'score'])
 
 class Tile:
     def __init__(self, letter: str, is_blank: bool = False):
@@ -12,7 +12,6 @@ class Tile:
     def __repr__(self):
         return f"Tile('{self.letter}', {self.is_blank})"
 
-
 class BoardSquare:
     def __init__(self, tile: Optional[Tile] = None, premium: str = None):
         self.tile = tile
@@ -21,39 +20,10 @@ class BoardSquare:
     def __repr__(self):
         return f"BoardSquare({self.tile}, '{self.premium}')"
 
-@dataclass
-class BoardData:
-    board: List[List[Optional[Tile]]]
-    timestamp: str
-
-    @classmethod
-    def from_dict(cls, data):
-        board = []
-        for row in data['board']:
-            board_row = []
-            for cell in row:
-                if cell is None:
-                    board_row.append(None)
-                else:
-                    board_row.append(Tile(
-                        letter=cell['letter'],
-                        is_blank=cell.get('isBlank', False)
-                    ))
-            board.append(board_row)
-
-        return cls(
-            board=board,
-            timestamp=data['timestamp']
-        )
-
-
-Move = namedtuple('Move', ['row', 'col', 'direction', 'word', 'score'])
-
 class GADDAGNode:
     def __init__(self):
         self.arcs = {}  # Maps characters to other nodes
         self.is_terminal = False  # Indicates if a valid word ends here
-
 
 class GADDAG:
     def __init__(self):
@@ -99,23 +69,23 @@ class GADDAG:
         return False
 
     def build_from_dictionary(self, dictionary_path: str) -> None:
-        """Build the GADDAG from a dictionary file."""
         with open(dictionary_path, 'r') as file:
             for line in file:
                 word = line.strip()
                 if word and all(c.isalpha() for c in word):
                     self.add_word(word)
 
-
-# Scrabble board and move generation
 class ScrabbleBoard:
     def __init__(self, size: int = 15):
         self.size = size
         self.board = [[BoardSquare() for _ in range(size)] for _ in range(size)]
-        self.set_premium_squares()
-        self.gaddag = None
+        self._set_premium_squares()
+        self.gaddag = GADDAG()
 
-    def set_premium_squares(self) -> None:
+    def load(self, dict_path: str = './dictionary.txt'):
+        self.gaddag.build_from_dictionary(dict_path)
+
+    def _set_premium_squares(self) -> None:
         """Set the premium squares on the Scrabble board.
 
         Sets up all premium squares on a standard 15x15 Scrabble board:
@@ -178,15 +148,7 @@ class ScrabbleBoard:
         for row, col in tw_positions:
             self.board[row][col].premium = 'TW'
 
-        # For visual verification, you can add this debug output
-        # self.print_premium_squares()
-
-    def load_dictionary(self, dictionary_path: str) -> None:
-        """Load the dictionary into a GADDAG structure."""
-        self.gaddag = GADDAG()
-        self.gaddag.build_from_dictionary(dictionary_path)
-
-    def is_empty(self) -> bool:
+    def _is_empty(self) -> bool:
         """Check if the board is empty."""
         for row in self.board:
             for square in row:
@@ -194,8 +156,7 @@ class ScrabbleBoard:
                     return False
         return True
 
-    def get_all_anchors(self) -> List[Tuple[int, int]]:
-        """Find all anchor squares (adjacent to existing tiles)."""
+    def _get_all_anchors(self) -> List[Tuple[int, int]]:
         anchors = []
         for r in range(self.size):
             for c in range(self.size):
@@ -213,12 +174,12 @@ class ScrabbleBoard:
                         anchors.append((r, c))
 
         # If board is empty, center square is the only anchor
-        if self.is_empty():
+        if self._is_empty():
             anchors.append((self.size // 2, self.size // 2))
 
         return anchors
 
-    def get_cross_checks(self, row: int, col: int, is_horizontal: bool) -> Set[str]:
+    def _get_cross_checks(self, row: int, col: int, is_horizontal: bool) -> Set[str]:
         """
         Determine which letters can be legally placed at (row, col)
         considering perpendicular words.
@@ -273,12 +234,16 @@ class ScrabbleBoard:
                 c += cross_dc
 
             # Check if this forms a valid word
-            if len(cross_word) == 1 or self.gaddag.is_valid_word(''.join(cross_word)):
+            cross_word_str = ''.join(cross_word)
+            if len(cross_word) > 1 and self.gaddag.is_valid_word(cross_word_str):
+                valid_letters.add(letter)
+            elif len(cross_word) == 1 and self.gaddag.is_valid_word(letter):
+                # Single letter must be a valid word by itself
                 valid_letters.add(letter)
 
         return valid_letters
 
-    def find_moves_from_anchor(self, row: int, col: int, rack: List[Tile], is_horizontal: bool = True) -> List[Move]:
+    def _find_moves_from_anchor(self, row: int, col: int, rack: List[Tile], is_horizontal: bool = True) -> List[Move]:
         """Find all legal moves that include the anchor square."""
         moves = []
 
@@ -289,11 +254,18 @@ class ScrabbleBoard:
         # Direction vectors
         dr, dc = (0, 1) if is_horizontal else (1, 0)
 
-        # Get rack letters
-        rack_letters = [tile.letter for tile in rack]
+        # Convert rack tiles to letters for easier processing
+        rack_letters = []
+        for tile in rack:
+            if tile.is_blank:
+                rack_letters.append('')  # Empty string indicates a blank tile
+            else:
+                rack_letters.append(tile.letter)
 
-        # Get cross-checks
-        cross_checks = self.get_cross_checks(row, col, is_horizontal)
+        # Get cross-checks for the anchor position
+        cross_checks = self._get_cross_checks(row, col, is_horizontal)
+        if not cross_checks:  # No valid letters can be placed here
+            return moves
 
         # Find the prefix (tiles already on board before the anchor)
         prefix = []
@@ -307,120 +279,201 @@ class ScrabbleBoard:
                 break
         prefix = prefix[::-1]  # Reverse to get correct order
 
-        # Find possible suffix extensions from the anchor
-        def extend_right(node: GADDAGNode, path: List[str], pos: Tuple[int, int], remaining_rack: List[str]):
+        # Function to extend right (forward) from a position
+        def extend_right(node, path, pos, remaining_rack, used_blanks=None):
+            if used_blanks is None:
+                used_blanks = []  # Track positions where blanks are used
+
             r, c = pos
+
+            # Check if we're still on the board
             if r < 0 or r >= self.size or c < 0 or c >= self.size:
                 return
 
-            # If square is empty, try letters from rack
-            if self.board[r][c].tile is None:
-                # Try each letter in the rack
-                for i, letter in enumerate(remaining_rack):
-                    if letter in node.arcs and letter in cross_checks:
-                        new_path = path + [letter]
-                        new_remaining = remaining_rack[:i] + remaining_rack[i + 1:]
+            # Get cross-checks for the current position (not just using anchor's cross-checks)
+            current_cross_checks = self._get_cross_checks(r, c, is_horizontal)
+            if not current_cross_checks:  # No valid letters can be placed here
+                return
 
-                        next_node = node.arcs[letter]
-                        if next_node.is_terminal:
-                            # Found a valid word
-                            word = ''.join(prefix + new_path)
-                            moves.append(Move(
-                                row=row - dr * len(prefix),
-                                col=col - dc * len(prefix),
-                                direction='across' if is_horizontal else 'down',
-                                word=word,
-                                score=self.calculate_score(row - dr * len(prefix), col - dc * len(prefix), word,
-                                                           is_horizontal)
-                            ))
-
-                        # Continue extending
-                        extend_right(next_node, new_path, (r + dr, c + dc), new_remaining)
-
-                # Try blanks in the rack (if any)
-                blank_indices = [i for i, tile in enumerate(rack) if tile.is_blank]
-                for blank_idx in blank_indices:
-                    for letter in cross_checks:
-                        if letter in node.arcs:
-                            # Use blank as this letter
-                            new_remaining = remaining_rack.copy()
-                            del new_remaining[blank_idx]
-                            new_path = path + [letter.lower()]  # Lowercase to indicate blank
-
-                            next_node = node.arcs[letter]
-                            if next_node.is_terminal:
-                                word = ''.join(prefix + new_path)
-                                moves.append(Move(
-                                    row=row - dr * len(prefix),
-                                    col=col - dc * len(prefix),
-                                    direction='across' if is_horizontal else 'down',
-                                    word=word,
-                                    score=self.calculate_score(row - dr * len(prefix), col - dc * len(prefix), word,
-                                                               is_horizontal)
-                                ))
-
-                            # Continue extending
-                            extend_right(next_node, new_path, (r + dr, c + dc), new_remaining)
-
-            # If square already has a tile, incorporate it
-            else:
+            # If the current square has a tile, incorporate it and continue
+            if self.board[r][c].tile is not None:
                 letter = self.board[r][c].tile.letter
                 if letter in node.arcs:
                     next_node = node.arcs[letter]
                     new_path = path + [letter]
 
+                    # If we've made a valid word, record it
                     if next_node.is_terminal:
-                        word = ''.join(prefix + new_path)
+                        # Find the complete word
+                        complete_word = ''.join(prefix + new_path)
+
+                        # Apply lowercase to indicate blanks
+                        word_with_blanks = list(complete_word.upper())
+                        for idx in used_blanks:
+                            if 0 <= idx < len(word_with_blanks):
+                                word_with_blanks[idx] = word_with_blanks[idx].lower()
+
+                        formatted_word = ''.join(word_with_blanks)
+
+                        # Calculate starting position
+                        start_row = row - dr * len(prefix)
+                        start_col = col - dc * len(prefix)
+
+                        # Add the move
                         moves.append(Move(
-                            row=row - dr * len(prefix),
-                            col=col - dc * len(prefix),
+                            row=start_row,
+                            col=start_col,
                             direction='across' if is_horizontal else 'down',
-                            word=word,
-                            score=self.calculate_score(row - dr * len(prefix), col - dc * len(prefix), word,
-                                                       is_horizontal)
+                            word=formatted_word,
+                            score=self._calculate_score(start_row, start_col, complete_word, is_horizontal)
                         ))
 
-                    # Continue extending
-                    extend_right(next_node, new_path, (r + dr, c + dc), remaining_rack)
+                    # Continue extending - make sure to increment position correctly
+                    extend_right(next_node, new_path, (r + dr, c + dc), remaining_rack, used_blanks)
+            else:
+                # Empty square - try letters from rack that satisfy cross checks
+                for i, letter in enumerate(remaining_rack):
+                    is_blank = letter == ''
 
-        # Start extending from each prefix possibility
-        if not prefix:  # No prefix, start from root
-            for letter in rack_letters:
-                if letter in self.gaddag.root.arcs and letter in cross_checks:
-                    # This is a valid starting letter
-                    start_node = self.gaddag.root.arcs[letter]
-                    new_rack = rack_letters.copy()
-                    new_rack.remove(letter)
+                    # For regular tiles, check if the letter is valid
+                    if not is_blank:
+                        if letter in node.arcs and letter in current_cross_checks:
+                            next_node = node.arcs[letter]
+                            new_path = path + [letter]
+                            new_rack = remaining_rack.copy()
+                            new_rack.pop(i)
 
-                    extend_right(start_node, [letter], (row + dr, col + dc), new_rack)
-        else:
-            # With prefix, navigate to the correct GADDAG node
-            node = self.gaddag.root
-            for letter in prefix[-1::-1]:  # Reverse the prefix for GADDAG
-                if letter in node.arcs:
-                    node = node.arcs[letter]
+                            # If we've made a valid word, record it
+                            if next_node.is_terminal:
+                                complete_word = ''.join(prefix + new_path)
+
+                                start_row = row - dr * len(prefix)
+                                start_col = col - dc * len(prefix)
+
+                                moves.append(Move(
+                                    row=start_row,
+                                    col=start_col,
+                                    direction='across' if is_horizontal else 'down',
+                                    word=complete_word,
+                                    score=self._calculate_score(start_row, start_col, complete_word, is_horizontal)
+                                ))
+
+                            # Continue extending - make sure to increment position correctly
+                            extend_right(next_node, new_path, (r + dr, c + dc), new_rack, used_blanks)
+
+                    # For blank tiles, try all valid cross-check letters
+                    else:
+                        for cross_letter in current_cross_checks:
+                            if cross_letter in node.arcs:
+                                next_node = node.arcs[cross_letter]
+                                # Use lowercase to mark it was a blank
+                                blank_pos = len(prefix) + len(path)
+                                new_path = path + [cross_letter]
+                                new_rack = remaining_rack.copy()
+                                new_rack.pop(i)
+                                new_used_blanks = used_blanks + [blank_pos]
+
+                                # If we've made a valid word, record it
+                                if next_node.is_terminal:
+                                    complete_word = ''.join(prefix + new_path)
+
+                                    # Mark blanks as lowercase in the final word
+                                    word_with_blanks = list(complete_word.upper())
+                                    for idx in new_used_blanks:
+                                        if 0 <= idx < len(word_with_blanks):
+                                            word_with_blanks[idx] = word_with_blanks[idx].lower()
+
+                                    formatted_word = ''.join(word_with_blanks)
+
+                                    start_row = row - dr * len(prefix)
+                                    start_col = col - dc * len(prefix)
+
+                                    moves.append(Move(
+                                        row=start_row,
+                                        col=start_col,
+                                        direction='across' if is_horizontal else 'down',
+                                        word=formatted_word,
+                                        score=self._calculate_score(start_row, start_col, complete_word, is_horizontal)
+                                    ))
+
+                                # Continue extending - make sure to increment position correctly
+                                extend_right(next_node, new_path, (r + dr, c + dc), new_rack, new_used_blanks)
+
+        # Handle different cases based on prefix existence
+        if prefix:
+            # GADDAG pattern: go through reversed prefix to delimiter, then forward
+            current_node = self.gaddag.root
+
+            # Try to navigate through the reversed prefix
+            for letter in reversed(prefix):
+                if letter in current_node.arcs:
+                    current_node = current_node.arcs[letter]
                 else:
-                    return moves  # Invalid prefix
+                    # Invalid prefix path in GADDAG
+                    return moves
 
-            # Crossed the delimiter in GADDAG
-            if self.gaddag.delimiter in node.arcs:
-                node = node.arcs[self.gaddag.delimiter]
-                extend_right(node, [], (row, col), rack_letters)
+            # Check if we can cross the delimiter
+            if self.gaddag.delimiter in current_node.arcs:
+                # Start extending from after the delimiter
+                delimiter_node = current_node.arcs[self.gaddag.delimiter]
+                extend_right(delimiter_node, [], (row, col), rack_letters)
+        else:
+            # No prefix - we need to place the first letter at the anchor
+            for i, letter in enumerate(rack_letters):
+                is_blank = letter == ''
+
+                if not is_blank:
+                    # Regular tile
+                    if letter in cross_checks:
+                        # Check if placing this letter starts a valid word path
+                        if letter in self.gaddag.root.arcs:
+                            next_node = self.gaddag.root.arcs[letter]
+                            new_rack = rack_letters.copy()
+                            new_rack.pop(i)
+
+                            # Check if a single letter is a valid word
+                            if next_node.is_terminal:
+                                moves.append(Move(
+                                    row=row,
+                                    col=col,
+                                    direction='across' if is_horizontal else 'down',
+                                    word=letter,
+                                    score=self._calculate_score(row, col, letter, is_horizontal)
+                                ))
+
+                            # Try to extend this beginning
+                            if self.gaddag.delimiter in next_node.arcs:
+                                after_delimiter = next_node.arcs[self.gaddag.delimiter]
+                                extend_right(after_delimiter, [letter], (row + dr, col + dc), new_rack)
+                else:
+                    # Blank tile - try all valid cross-check letters
+                    for cross_letter in cross_checks:
+                        if cross_letter in self.gaddag.root.arcs:
+                            next_node = self.gaddag.root.arcs[cross_letter]
+                            new_rack = rack_letters.copy()
+                            new_rack.pop(i)
+
+                            # Mark as lowercase to indicate blank
+                            blank_letter = cross_letter.lower()
+
+                            # Check if a single letter is a valid word
+                            if next_node.is_terminal:
+                                moves.append(Move(
+                                    row=row,
+                                    col=col,
+                                    direction='across' if is_horizontal else 'down',
+                                    word=blank_letter,
+                                    score=self._calculate_score(row, col, cross_letter, is_horizontal)
+                                ))
+
+                            # Try to extend this beginning
+                            if self.gaddag.delimiter in next_node.arcs:
+                                after_delimiter = next_node.arcs[self.gaddag.delimiter]
+                                extend_right(after_delimiter, [cross_letter], (row + dr, col + dc), new_rack, [0])
 
         return moves
 
-    def calculate_score(self, row: int, col: int, word: str, is_horizontal: bool) -> int:
-        """Calculate the score for a word placed on the board.
-
-        Args:
-            row: Starting row for the word
-            col: Starting column for the word
-            word: The word to calculate the score for
-            is_horizontal: True if the word is placed horizontally, False for vertical
-
-        Returns:
-            The total score for the word, including premium square bonuses
-        """
+    def _calculate_score(self, row: int, col: int, word: str, is_horizontal: bool) -> int:
         # Letter values in Scrabble
         letter_values = {
             'A': 1, 'B': 3, 'C': 3, 'D': 2, 'E': 1, 'F': 4, 'G': 2, 'H': 4, 'I': 1,
@@ -432,6 +485,7 @@ class ScrabbleBoard:
         word_score = 0
         word_multiplier = 1  # Default, will be updated based on premium squares
 
+        tiles_from_rack = 0
         for i, letter in enumerate(word):
             # Calculate the current position
             current_row = row
@@ -455,8 +509,10 @@ class ScrabbleBoard:
             premium = self.board[current_row][current_col].premium
 
             # Check if the square already has a tile (premium doesn't apply)
-            tile_exists = hasattr(self.board[current_row][current_col], 'tile') and self.board[current_row][
-                current_col].tile is not None
+            tile_exists = self.board[current_row][current_col].tile is not None
+
+            if not tile_exists:
+                tiles_from_rack += 1
 
             if premium and not tile_exists:
                 if premium == 'DL':
@@ -474,11 +530,33 @@ class ScrabbleBoard:
         # Apply word multiplier to get final score
         final_score = word_score * word_multiplier
 
-        # Bonus for using all 7 tiles (if applicable)
-        if len(word) == 7:  # A "bingo" in Scrabble
+
+        # Apply bingo bonus if all 7 tiles from rack were used
+        if tiles_from_rack == 7:
             final_score += 50
 
         return final_score
+
+    def is_connected_to_existing(self, row, col, word, is_horizontal):
+        """Check if the word connects to existing tiles on the board."""
+        dr, dc = (0, 1) if is_horizontal else (1, 0)
+
+        # Check if any of the word's positions overlap with existing tiles
+        for i in range(len(word)):
+            r, c = row + i * dr, col + i * dc
+            if 0 <= r < self.size and 0 <= c < self.size:
+                # Direct overlap with existing tile
+                if self.board[r][c].tile is not None:
+                    return True
+
+                # Check adjacent squares (orthogonal)
+                for adj_dr, adj_dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    adj_r, adj_c = r + adj_dr, c + adj_dc
+                    if (0 <= adj_r < self.size and 0 <= adj_c < self.size and
+                            self.board[adj_r][adj_c].tile is not None):
+                        return True
+
+        return False
 
     def get_all_legal_moves(self, rack: List[Tile]) -> List[Move]:
         """Find all legal moves for the given rack."""
@@ -486,82 +564,47 @@ class ScrabbleBoard:
             raise ValueError("Dictionary not loaded. Call load_dictionary() first.")
 
         moves = []
-        anchors = self.get_all_anchors()
+        anchors = self._get_all_anchors()
 
         for row, col in anchors:
             # Horizontal moves
-            moves.extend(self.find_moves_from_anchor(row, col, rack, is_horizontal=True))
+            moves.extend(self._find_moves_from_anchor(row, col, rack, is_horizontal=True))
 
             # Vertical moves
-            moves.extend(self.find_moves_from_anchor(row, col, rack, is_horizontal=False))
+            moves.extend(self._find_moves_from_anchor(row, col, rack, is_horizontal=False))
 
-        return moves
+        # if not self._is_empty():
+        #     moves = [move for move in moves if self.is_connected_to_existing(
+        #         move.row, move.col, move.word, move.direction == 'across')]
 
+        return sorted(moves, key=lambda m: m.score, reverse=True)
 
-def find_all_moves(board_state: List[List[dict]], rack: List[dict], dictionary_path: str = "TWL06.txt") -> List[dict]:
-    """
-    Find all legal Scrabble moves given a board state and rack.
+    def set_board(self, board: List[List[Tile]]):
+        for row in range(self.size):
+            for col in range(self.size):
+                # Set the tile on the board, preserving premium squares
+                if board[row][col] is not None:
+                    self.board[row][col].tile = board[row][col]
+                else:
+                    self.board[row][col].tile = None
 
-    Args:
-        board_state: 2D array of dicts with 'letter' and 'isBlank' fields or None
-        rack: List of dicts with 'letter' and 'isBlank' fields
-        dictionary_path: Path to the dictionary file
+    def _add_horizontal(self, word: str, row, col):
+        for i in range(len(word)):
+            c = col + i
+            self.board[row][c].tile = Tile(word[i])
 
-    Returns:
-        List of move dictionaries with position, direction, word, and score
-    """
-    # Convert input format to internal representation
-    size = len(board_state)
-    board = ScrabbleBoard(size)
+    def _add_vertical(self, word: str, row, col):
+        for i in range(len(word)):
+            r = row + i
+            self.board[r][col].tile = Tile(word[i])
 
-    # Set up the board
-    for r in range(size):
-        for c in range(size):
-            cell = board_state[r][c]
-            if cell and cell.get('letter'):
-                board.board[r][c].tile = Tile(cell['letter'], cell.get('isBlank', False))
-
-    # Convert rack
-    rack_tiles = [Tile(tile['letter'], tile.get('isBlank', False)) for tile in rack]
-
-    # Load dictionary
-    board.load_dictionary(dictionary_path)
-
-    # Find moves
-    moves = board.get_all_legal_moves(rack_tiles)
-
-    # Convert to output format
-    return [
-        {
-            'startRow': move.row,
-            'startCol': move.col,
-            'direction': move.direction,
-            'word': move.word,
-            'score': move.score
-        }
-        for move in sorted(moves, key=lambda m: m.score, reverse=True)
-    ]
-
-
-# Example usage
-if __name__ == "__main__":
-    # Example board state (empty 15x15 board)
-    board_state = [[None for _ in range(15)] for _ in range(15)]
-
-    # Example rack
-    rack = [
-        {'letter': 'A', 'isBlank': False},
-        {'letter': 'B', 'isBlank': False},
-        {'letter': 'C', 'isBlank': False},
-        {'letter': 'D', 'isBlank': False},
-        {'letter': 'E', 'isBlank': False},
-        {'letter': 'F', 'isBlank': False},
-        {'letter': 'G', 'isBlank': False}
-    ]
-
-    # Find all moves
-    moves = find_all_moves(board_state, rack, "dictionary.txt")
-    print(f"Found {len(moves)} possible moves.")
-    for move in moves[:10]:  # Show top 10 moves
-        print(
-            f"{move['word']} at ({move['startRow']}, {move['startCol']}) {move['direction']} - Score: {move['score']}")
+    def __str__(self):
+        result = ''
+        for row in range(self.size):
+            s = ''
+            for col in range(self.size):
+                tile = self.board[row][col].tile
+                s += tile.letter if tile else ' '
+            s += '\n'
+            result += s
+        return result
