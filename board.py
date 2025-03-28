@@ -1,8 +1,14 @@
-import string
 from collections import namedtuple
 from typing import List, Set, Tuple, Optional
 
 Move = namedtuple('Move', ['row', 'col', 'direction', 'word', 'score'])
+letter_set = 'AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUWYZŹŻ'
+letter_values = {
+            'A': 1, 'Ą': 9, 'B': 3, 'C': 2, 'Ć': 6, 'D': 2, 'E': 1, 'Ę': 5, 'F': 5, 'G': 3, 'H': 3, 'I': 1,
+            'J': 3, 'K': 2, 'L': 2, 'Ł': 3, 'M': 2, 'N': 1, 'Ń': 7, 'O': 1, 'Ó': 5, 'P': 2, 'R': 1,
+            'S': 1, 'Ś': 5, 'T': 2, 'U': 3, 'W': 1, 'Y': 2, 'Z': 1, 'Ź': 9, 'Ż': 5
+        }
+
 
 class Tile:
     def __init__(self, letter: str, is_blank: bool = False):
@@ -12,6 +18,7 @@ class Tile:
     def __repr__(self):
         return f"Tile('{self.letter}', {self.is_blank})"
 
+
 class BoardSquare:
     def __init__(self, tile: Optional[Tile] = None, premium: str = None):
         self.tile = tile
@@ -20,10 +27,12 @@ class BoardSquare:
     def __repr__(self):
         return f"BoardSquare({self.tile}, '{self.premium}')"
 
+
 class GADDAGNode:
     def __init__(self):
         self.arcs = {}  # Maps characters to other nodes
         self.is_terminal = False  # Indicates if a valid word ends here
+
 
 class GADDAG:
     def __init__(self):
@@ -31,14 +40,11 @@ class GADDAG:
         self.delimiter = '>'  # Separator character
 
     def add_word(self, word: str) -> None:
-        """Add a word to the GADDAG structure."""
         word = word.upper()
-        # For each position in the word
         for i in range(len(word)):
             # Create the reversed prefix + delimiter + suffix
             gaddag_str = word[i::-1] + self.delimiter + word[i + 1:]
 
-            # Add this string to the GADDAG
             node = self.root
             for char in gaddag_str:
                 if char not in node.arcs:
@@ -47,7 +53,6 @@ class GADDAG:
             node.is_terminal = True
 
     def is_valid_word(self, word: str) -> bool:
-        """Check if a word exists in the dictionary."""
         word = word.upper()
         # Check each way of breaking the word
         for i in range(len(word)):
@@ -72,8 +77,9 @@ class GADDAG:
         with open(dictionary_path, 'r') as file:
             for line in file:
                 word = line.strip()
-                if word and all(c.isalpha() for c in word):
+                if word:
                     self.add_word(word)
+
 
 class ScrabbleBoard:
     def __init__(self, size: int = 15):
@@ -82,18 +88,10 @@ class ScrabbleBoard:
         self._set_premium_squares()
         self.gaddag = GADDAG()
 
-    def load(self, dict_path: str = './dictionary.txt'):
+    def load(self, dict_path: str = './dict.txt'):
         self.gaddag.build_from_dictionary(dict_path)
 
     def _set_premium_squares(self) -> None:
-        """Set the premium squares on the Scrabble board.
-
-        Sets up all premium squares on a standard 15x15 Scrabble board:
-        - DL: Double Letter Score
-        - TL: Triple Letter Score
-        - DW: Double Word Score
-        - TW: Triple Word Score
-        """
         # Double letter scores
         dl_positions = [
             (0, 3), (0, 11),
@@ -149,7 +147,6 @@ class ScrabbleBoard:
             self.board[row][col].premium = 'TW'
 
     def _is_empty(self) -> bool:
-        """Check if the board is empty."""
         for row in self.board:
             for square in row:
                 if square.tile is not None:
@@ -180,10 +177,6 @@ class ScrabbleBoard:
         return anchors
 
     def _get_cross_checks(self, row: int, col: int, is_horizontal: bool) -> Set[str]:
-        """
-        Determine which letters can be legally placed at (row, col)
-        considering perpendicular words.
-        """
         if self.board[row][col].tile is not None:
             return set()  # Square already occupied
 
@@ -206,11 +199,11 @@ class ScrabbleBoard:
             c += cross_dc
 
         if not has_perpendicular:
-            return set(string.ascii_uppercase)  # All letters valid
+            return set(letter_set)  # All letters valid
 
         # Check each letter
         valid_letters = set()
-        for letter in string.ascii_uppercase:
+        for letter in letter_set:
             # Build the cross word
             cross_word = []
 
@@ -244,7 +237,6 @@ class ScrabbleBoard:
         return valid_letters
 
     def _find_moves_from_anchor(self, row: int, col: int, rack: List[Tile], is_horizontal: bool = True) -> List[Move]:
-        """Find all legal moves that include the anchor square."""
         moves = []
 
         # Skip if square is already occupied
@@ -474,13 +466,6 @@ class ScrabbleBoard:
         return moves
 
     def _calculate_score(self, row: int, col: int, word: str, is_horizontal: bool) -> int:
-        # Letter values in Scrabble
-        letter_values = {
-            'A': 1, 'B': 3, 'C': 3, 'D': 2, 'E': 1, 'F': 4, 'G': 2, 'H': 4, 'I': 1,
-            'J': 8, 'K': 5, 'L': 1, 'M': 3, 'N': 1, 'O': 1, 'P': 3, 'Q': 10, 'R': 1,
-            'S': 1, 'T': 1, 'U': 1, 'V': 4, 'W': 4, 'X': 8, 'Y': 4, 'Z': 10
-        }
-
         word = word.upper()  # Convert to uppercase to match letter_values keys
         word_score = 0
         word_multiplier = 1  # Default, will be updated based on premium squares
@@ -530,36 +515,14 @@ class ScrabbleBoard:
         # Apply word multiplier to get final score
         final_score = word_score * word_multiplier
 
-
         # Apply bingo bonus if all 7 tiles from rack were used
         if tiles_from_rack == 7:
             final_score += 50
 
         return final_score
 
-    def is_connected_to_existing(self, row, col, word, is_horizontal):
-        """Check if the word connects to existing tiles on the board."""
-        dr, dc = (0, 1) if is_horizontal else (1, 0)
-
-        # Check if any of the word's positions overlap with existing tiles
-        for i in range(len(word)):
-            r, c = row + i * dr, col + i * dc
-            if 0 <= r < self.size and 0 <= c < self.size:
-                # Direct overlap with existing tile
-                if self.board[r][c].tile is not None:
-                    return True
-
-                # Check adjacent squares (orthogonal)
-                for adj_dr, adj_dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    adj_r, adj_c = r + adj_dr, c + adj_dc
-                    if (0 <= adj_r < self.size and 0 <= adj_c < self.size and
-                            self.board[adj_r][adj_c].tile is not None):
-                        return True
-
-        return False
 
     def get_all_legal_moves(self, rack: List[Tile]) -> List[Move]:
-        """Find all legal moves for the given rack."""
         if not self.gaddag:
             raise ValueError("Dictionary not loaded. Call load_dictionary() first.")
 
@@ -572,10 +535,6 @@ class ScrabbleBoard:
 
             # Vertical moves
             moves.extend(self._find_moves_from_anchor(row, col, rack, is_horizontal=False))
-
-        # if not self._is_empty():
-        #     moves = [move for move in moves if self.is_connected_to_existing(
-        #         move.row, move.col, move.word, move.direction == 'across')]
 
         return sorted(moves, key=lambda m: m.score, reverse=True)
 
