@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <style>
         body {
           font-family: Arial, sans-serif;
@@ -290,34 +291,14 @@
           text-transform: uppercase;
         }
 
-        /* Rack Management Styles */
-        .rack-management {
-          background-color: #f5f5f5;
-          padding: 15px;
-          border-radius: 5px;
-          margin-bottom: 20px;
-          border: 1px solid #ddd;
-        }
-
-        .rack-management h3 {
-          margin-top: 0;
-        }
-
-        .rack-actions {
-          display: flex;
-          gap: 10px;
-          margin-top: 10px;
-        }
-
 .rack-container {
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
-/* Top Moves Section Styles - update width */
 .top-moves-section {
-  margin-top: 0; /* Remove top margin since it's now positioned below with gap */
+  margin-top: 0;
   width: 210px;
 }
 
@@ -372,11 +353,7 @@
 </head>
 <body>
 <div class="scrabble-container">
-    <h2>Scrabble Board Editor</h2>
-
-    <!-- Word Placement Section -->
     <div class="word-placement">
-        <h3>Place Word</h3>
         <div class="word-placement-form">
             <div class="form-group">
                 <label for="rowInput">Row (0-14):</label>
@@ -414,20 +391,11 @@
         </div>
     </div>
 
-    <!-- Rack Management Section -->
-    <div class="rack-management">
-        <h3>Manage Rack</h3>
-        <div class="rack-actions">
-            <button id="clearRackButton">Clear Rack</button>
-        </div>
-    </div>
-
     <p>Click on a square to add or edit a tile. Right-click to remove a tile.</p>
 
     <div class="controls">
         <button id="saveButton">Save Board</button>
         <button id="clearButton">Clear Board</button>
-        <button id="exportButton">Export JSON</button>
     </div>
 
     <div class="board-and-rack">
@@ -459,11 +427,6 @@
         </div>
     </div>
 
-    <div class="controls" style="margin-top: 20px;">
-        <button id="importButton">Import JSON</button>
-        <input type="file" id="importFile" style="display: none;" accept=".json">
-    </div>
-
     <pre id="outputJson"
          style="background: #f5f5f5; padding: 10px; margin-top: 20px; max-height: 200px; overflow: auto; display: none;"></pre>
 </div>
@@ -471,9 +434,9 @@
 <script>
     // Scrabble letter values
 const letterValues = {
-  'A': 1, 'B': 3, 'C': 3, 'D': 2, 'E': 1, 'F': 4, 'G': 2, 'H': 4, 'I': 1,
-  'J': 8, 'K': 5, 'L': 1, 'M': 3, 'N': 1, 'O': 1, 'P': 3, 'Q': 10, 'R': 1,
-  'S': 1, 'T': 1, 'U': 1, 'V': 4, 'W': 4, 'X': 8, 'Y': 4, 'Z': 10, '_': 0
+  'A': 1, 'Ą': 9, 'B': 3, 'C': 2, 'Ć': 6, 'D': 2, 'E': 1, 'Ę': 5, 'F': 5, 'G': 3, 'H': 3, 'I': 1,
+  'J': 3, 'K': 2, 'L': 2, 'Ł': 3, 'M': 2, 'N': 1, 'Ń': 7, 'O': 1, 'Ó': 5, 'P': 2, 'R': 1,
+  'S': 1, 'Ś': 5, 'T': 2, 'U': 3, 'W': 1, 'Y': 2, 'Z': 1, 'Ź': 9, 'Ż': 5, '_': 0
 };
 
 // Define board special squares
@@ -565,7 +528,7 @@ const letterSelector = document.getElementById('letterSelector');
 letterSelector.style.display = 'none';
 
 // Populate letter selector
-const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
+const letters = 'AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUWYZŹŻ_';
 for (let i = 0; i < letters.length; i++) {
   const letter = letters[i];
   const letterDiv = document.createElement('div');
@@ -818,9 +781,6 @@ function removeRackTile(index) {
   }
 }
 
-// Clear rack
-document.getElementById('clearRackButton').addEventListener('click', clearRack);
-
 function clearRack() {
   rackState = Array(7).fill(null);
 
@@ -834,54 +794,6 @@ function clearRack() {
   });
 }
 
-// Save board to JSON
-document.getElementById('exportButton').addEventListener('click', function() {
-  const output = document.getElementById('outputJson');
-
-  // Create data structure
-  const boardData = {
-    board: Array(15).fill().map(() => Array(15).fill(null)),
-    rack: Array(7).fill(null),
-    timestamp: new Date().toISOString()
-  };
-
-  // Fill board data
-  for (let row = 0; row < 15; row++) {
-    for (let col = 0; col < 15; col++) {
-      if (boardState[row][col]) {
-        boardData.board[row][col] = {
-          letter: boardState[row][col].letter,
-          isBlank: boardState[row][col].isBlank || false
-        };
-      }
-    }
-  }
-
-  // Fill rack data
-  for (let i = 0; i < 7; i++) {
-    if (rackState[i]) {
-      boardData.rack[i] = {
-        letter: rackState[i].letter,
-        isBlank: rackState[i].isBlank || false
-      };
-    }
-  }
-
-  // Display JSON
-  const json = JSON.stringify(boardData, null, 2);
-  output.textContent = json;
-  output.style.display = 'block';
-
-  // Copy to clipboard
-  navigator.clipboard.writeText(json)
-    .then(() => {
-      alert('Board data copied to clipboard!');
-    })
-    .catch(err => {
-      console.error('Failed to copy: ', err);
-    });
-});
-
 // Clear board
 document.getElementById('clearButton').addEventListener('click', clearBoard);
 
@@ -893,8 +805,6 @@ function clearBoard() {
   boardTiles.forEach(tile => {
     tile.parentNode.removeChild(tile);
   });
-
-  document.getElementById('outputJson').style.display = 'none';
 }
 
 // Word Placement Feature
@@ -963,59 +873,42 @@ function placeWord() {
   document.getElementById('blankLettersInput').value = '';
 }
 
-// Import JSON
-document.getElementById('importButton').addEventListener('click', function() {
-  document.getElementById('importFile').click();
-});
+function displayTopMoves(moves) {
+  const topMovesList = document.getElementById('topMovesList');
 
-document.getElementById('importFile').addEventListener('change', function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
+  // Clear current content
+  topMovesList.innerHTML = '';
 
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const data = JSON.parse(e.target.result);
-      importBoardData(data);
-    } catch (err) {
-      alert('Error parsing JSON file: ' + err.message);
-    }
-  };
-  reader.readAsText(file);
-});
-
-// Import board data
-function importBoardData(data) {
-  if (!data.board || !Array.isArray(data.board) || data.board.length !== 15) {
-    alert('Invalid board data format');
+  if (!moves || moves.length === 0) {
+    topMovesList.innerHTML = '<div class="empty-moves-msg">No valid moves found</div>';
     return;
   }
 
-  // Clear the board first
-  clearBoard();
+  // Add each move to the list
+  moves.forEach(move => {
+    const moveDiv = document.createElement('div');
+    moveDiv.className = 'move-item';
 
-  // Clear the rack
-  clearRack();
+    // Create word span with score
+    const wordSpan = document.createElement('span');
+    wordSpan.className = 'move-word';
+    wordSpan.textContent = move.word;
+    moveDiv.appendChild(wordSpan);
 
-  // Place board tiles
-  for (let row = 0; row < 15; row++) {
-    for (let col = 0; col < 15; col++) {
-      const tile = data.board[row][col];
-      if (tile && tile.letter) {
-        placeTile(row, col, tile.letter, tile.isBlank || false);
-      }
-    }
-  }
+    // Create score span
+    const scoreSpan = document.createElement('span');
+    scoreSpan.className = 'move-score';
+    scoreSpan.textContent = move.score + ' pts';
+    moveDiv.appendChild(scoreSpan);
 
-  // Place rack tiles if they exist
-  if (data.rack && Array.isArray(data.rack)) {
-    for (let i = 0; i < Math.min(data.rack.length, 7); i++) {
-      const tile = data.rack[i];
-      if (tile && tile.letter) {
-        placeRackTile(i, tile.letter, tile.isBlank || false);
-      }
-    }
-  }
+    // Create position info
+    const positionSpan = document.createElement('span');
+    positionSpan.className = 'move-position';
+    positionSpan.textContent = `${move.row},${move.col} (${move.direction})`;
+    moveDiv.appendChild(positionSpan);
+
+    topMovesList.appendChild(moveDiv);
+  });
 }
 
 // Save board (real REST call)
@@ -1064,52 +957,13 @@ document.getElementById('saveButton').addEventListener('click', function() {
   .then(data => {
     console.log('Success:', data);
     displayTopMoves(data.top_moves);
-    alert('Board data sent successfully!');
   })
   .catch((error) => {
     console.error('Error:', error);
     topMovesList.innerHTML = '<div class="empty-moves-msg">Error fetching moves</div>';
     alert('Error saving board: ' + error.message);
   });
-    });
-
-    function displayTopMoves(moves) {
-  const topMovesList = document.getElementById('topMovesList');
-
-  // Clear current content
-  topMovesList.innerHTML = '';
-
-  if (!moves || moves.length === 0) {
-    topMovesList.innerHTML = '<div class="empty-moves-msg">No valid moves found</div>';
-    return;
-  }
-
-  // Add each move to the list
-  moves.forEach(move => {
-    const moveDiv = document.createElement('div');
-    moveDiv.className = 'move-item';
-
-    // Create word span with score
-    const wordSpan = document.createElement('span');
-    wordSpan.className = 'move-word';
-    wordSpan.textContent = move.word;
-    moveDiv.appendChild(wordSpan);
-
-    // Create score span
-    const scoreSpan = document.createElement('span');
-    scoreSpan.className = 'move-score';
-    scoreSpan.textContent = move.score + ' pts';
-    moveDiv.appendChild(scoreSpan);
-
-    // Create position info
-    const positionSpan = document.createElement('span');
-    positionSpan.className = 'move-position';
-    positionSpan.textContent = `${move.row},${move.col} (${move.direction})`;
-    moveDiv.appendChild(positionSpan);
-
-    topMovesList.appendChild(moveDiv);
-  });
-}
+});
 </script>
 </body>
 </html>
