@@ -1,5 +1,5 @@
-from collections import namedtuple
-from typing import List, Set, Tuple, Optional
+from collections import namedtuple, Counter
+from typing import List, Set, Tuple, Optional, Dict
 
 Move = namedtuple('Move', ['row', 'col', 'direction', 'word', 'score'])
 letter_set = 'AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUWYZŹŻ'
@@ -8,6 +8,8 @@ letter_values = {
             'J': 3, 'K': 2, 'L': 2, 'Ł': 3, 'M': 2, 'N': 1, 'Ń': 7, 'O': 1, 'Ó': 5, 'P': 2, 'R': 1,
             'S': 1, 'Ś': 5, 'T': 2, 'U': 3, 'W': 1, 'Y': 2, 'Z': 1, 'Ź': 9, 'Ż': 5
         }
+
+valid_letters_for_gaddag_and_crosscheck = frozenset(letter_values.keys()) - {'?'}
 
 
 class Tile:
@@ -18,6 +20,16 @@ class Tile:
     def __repr__(self):
         return f"Tile('{self.letter}', {self.is_blank})"
 
+    def get_value_letter(self) -> Optional[str]:
+        """Returns the letter used for GADDAG lookup and scoring base"""
+        return self.letter.upper() if self.letter else None
+
+    def get_score(self) -> int:
+        """Gets the score, returning 0 for blanks"""
+        if self.is_blank or not self.letter:
+            return 0
+        return letter_values.get(self.letter.upper(), 0)
+
 
 class BoardSquare:
     def __init__(self, tile: Optional[Tile] = None, premium: str = None):
@@ -26,6 +38,9 @@ class BoardSquare:
 
     def __repr__(self):
         return f"BoardSquare({self.tile}, '{self.premium}')"
+
+    def is_empty(self) -> bool:
+        return self.tile is None
 
 
 class GADDAGNode:
@@ -91,6 +106,13 @@ class ScrabbleBoard:
     def load(self, dict_path: str = './dict.txt'):
         self.gaddag.build_from_dictionary(dict_path)
 
+    def _is_valid_coord(self, r: int, c: int) -> bool:
+        return 0 <= r < self.size and 0 <= c < self.size
+
+    def _is_center(self, r: int, c: int) -> bool:
+        return r == self.size // 2 and c == self.size // 2
+
+
     def _set_premium_squares(self) -> None:
         # Double letter scores
         dl_positions = [
@@ -147,11 +169,7 @@ class ScrabbleBoard:
             self.board[row][col].premium = 'TW'
 
     def _is_empty(self) -> bool:
-        for row in self.board:
-            for square in row:
-                if square.tile is not None:
-                    return False
-        return True
+        return self.board[7][7].is_empty()
 
     def _get_all_anchors(self) -> List[Tuple[int, int]]:
         anchors = []
@@ -204,9 +222,6 @@ class ScrabbleBoard:
         # Check each letter
         valid_letters = set()
         for letter in letter_set:
-            # Build the cross word
-            cross_word = []
-
             # Collect letters before
             r, c = row - cross_dr, col - cross_dc
             prefix = []
@@ -236,307 +251,441 @@ class ScrabbleBoard:
 
         return valid_letters
 
-    def _find_moves_from_anchor(self, row: int, col: int, rack: List[Tile], is_horizontal: bool = True) -> List[Move]:
-        moves = []
+    def _find_moves_from_anchor(self, anchor_row: int, anchor_col: int, rack: Counter, is_horizontal: bool) -> List[
+        Tuple[str, List[Tuple[int, int, Tile]]]]:
+        """
+        Finds all valid word placements starting from a given anchor square,
+        using the GADDAG. This function adapts the logic from scratch_6.py's gen/go_on.
 
-        # Skip if square is already occupied
-        if self.board[row][col].tile is not None:
-            return moves
+        Args:
+            anchor_row: The row of the anchor square.
+            anchor_col: The column of the anchor square.
+            rack: A Counter representing the player's tiles (e.g., {'A': 2, '?': 1}).
+            is_horizontal: True if generating horizontal moves, False for vertical.
 
-        # Direction vectors
-        dr, dc = (0, 1) if is_horizontal else (1, 0)
+        Returns:
+            A list of tuples: (word_string, placed_tiles_info).
+            placed_tiles_info is a list of (row, col, tile_placed) tuples.
+            'tile_placed' includes information if it was a blank and which letter it represents.
+        """
+        results = []
+        (dr, dc) = (0, 1) if is_horizontal else (1, 0)  # Direction vector
 
-        # Convert rack tiles to letters for easier processing
-        rack_letters = []
-        for tile in rack:
-            if tile.is_blank:
-                rack_letters.append('')  # Empty string indicates a blank tile
-            else:
-                rack_letters.append(tile.letter)
-
-        # Get cross-checks for the anchor position
-        cross_checks = self._get_cross_checks(row, col, is_horizontal)
-        if not cross_checks:  # No valid letters can be placed here
-            return moves
-
-        # Find the prefix (tiles already on board before the anchor)
-        prefix = []
-        r, c = row, col
-        while True:
+        # Limit how far left we can place tiles from the anchor
+        # `k` represents the number of squares to the left of the anchor we can potentially place tiles.
+        # We can place at most len(rack)-1 tiles to the left, as one tile must be on the anchor.
+        # We also cannot go off the board.
+        limit = 0
+        r, c = anchor_row - dr, anchor_col - dc
+        while self._is_valid_coord(r, c) and self.board[r][c].is_empty():
+            limit += 1
             r -= dr
             c -= dc
-            if 0 <= r < self.size and 0 <= c < self.size and self.board[r][c].tile is not None:
-                prefix.append(self.board[r][c].tile.letter)
+        max_left_extent = min(limit, len(rack) - 1 if len(
+            rack) > 0 else 0)  # Can't place more tiles left than we have minus one for anchor
+
+        # Inner recursive functions based on scratch_6.py's gen/go_on
+        # We start by trying to place the *first* letter of the reversed prefix
+        # to the *left* of the anchor, or on the anchor itself.
+
+        def extend_left(current_r, current_c, current_node, current_rack, built_word_reversed, placed_tiles_so_far):
+            """ Extends the word to the left (builds the reversed prefix in GADDAG terms)."""
+            # Try placing a tile from the rack at (current_r, current_c)
+            place_tile_at(current_r, current_c, current_node, current_rack, built_word_reversed, placed_tiles_so_far)
+
+            # If the square to the left is empty and within limits, recurse left
+            next_r, next_c = current_r - dr, current_c - dc
+            # Check if we have tiles left *and* haven't gone too far left from the anchor
+            distance_from_anchor = abs((next_r - anchor_row) * dr + (next_c - anchor_col) * dc)
+            if distance_from_anchor <= max_left_extent and self._is_valid_coord(next_r, next_c) and self.board[next_r][
+                next_c].is_empty():
+                extend_left(next_r, next_c, current_node, current_rack, built_word_reversed, placed_tiles_so_far)
+
+        def extend_right(current_r, current_c, current_node, current_rack, word_part_after_anchor, placed_tiles_so_far):
+            """ Extends the word to the right (builds the suffix in GADDAG terms)."""
+            # Base case: current_node is None (invalid path)
+            if current_node is None:
+                return
+
+            # Check if the current path forms a valid word ending here
+            if current_node.is_terminal and placed_tiles_so_far:  # Must place at least one tile
+                # Reconstruct the full word
+                anchor_pos_info = next((p for p in placed_tiles_so_far if p[0] == anchor_row and p[1] == anchor_col),
+                                       None)
+                if anchor_pos_info or not self.board[anchor_row][
+                    anchor_col].is_empty():  # Ensure move involves the anchor
+                    first_tile_info = min(placed_tiles_so_far,
+                                          key=lambda x: (x[0] * dr + x[1] * dc))  # Find min row/col based on direction
+                    start_r, start_c = first_tile_info[0], first_tile_info[1]
+                    word = self._reconstruct_word(start_r, start_c, is_horizontal, placed_tiles_so_far)
+                    if word:  # Check reconstruction worked
+                        results.append((word, placed_tiles_so_far))
+
+            # Check square to the right
+            next_r, next_c = current_r + dr, current_c + dc
+            if not self._is_valid_coord(next_r, next_c):
+                return  # Off board
+
+            square = self.board[next_r][next_c]
+            if square.is_empty():
+                # Try placing a tile from the rack
+                place_tile_at(next_r, next_c, current_node, current_rack, word_part_after_anchor, placed_tiles_so_far,
+                              extending_right=True)
+            else:
+                # Use existing tile on board
+                tile = square.tile
+                letter = tile.get_value_letter()
+                if letter in current_node.arcs:
+                    extend_right(next_r, next_c, current_node.arcs[letter], current_rack,
+                                 word_part_after_anchor + letter, placed_tiles_so_far)
+
+        def place_tile_at(r, c, prev_node, current_rack, built_word, placed_tiles_so_far, extending_right=False):
+            """ Tries placing each possible tile from the rack at (r, c)."""
+            cross_check_letters = self._get_cross_checks(r, c, is_horizontal)
+
+            for tile_char, count in current_rack.items():
+                if count == 0: continue
+
+                is_blank = (tile_char == '?')
+                possible_letters = valid_letters_for_gaddag_and_crosscheck if is_blank else [tile_char]
+
+                for letter in possible_letters:
+                    # Check GADDAG arc and cross-checks
+                    if letter in prev_node.arcs and letter in cross_check_letters:
+                        next_node = prev_node.arcs[letter]
+                        new_rack = current_rack.copy()
+                        new_rack[tile_char] -= 1
+
+                        # Create the Tile object placed
+                        placed_tile = Tile(letter, is_blank)  # Store the *assigned* letter for the blank
+                        new_placed_tiles = placed_tiles_so_far + [(r, c, placed_tile)]
+
+                        if extending_right:
+                            extend_right(r, c, next_node, new_rack, built_word + letter, new_placed_tiles)
+                        else:
+                            # Check if we can transition to extending right (GADDAG delimiter)
+                            if self.gaddag.delimiter in next_node.arcs:
+                                delimiter_node = next_node.arcs[self.gaddag.delimiter]
+                                # Start extending right from the anchor square
+                                extend_right(anchor_row, anchor_col, delimiter_node, new_rack, "", new_placed_tiles)
+
+                            # Continue extending left if possible
+                            next_r, next_c = r - dr, c - dc
+                            distance_from_anchor = abs((next_r - anchor_row) * dr + (next_c - anchor_col) * dc)
+                            if distance_from_anchor <= max_left_extent and self._is_valid_coord(next_r, next_c) and \
+                                    self.board[next_r][next_c].is_empty():
+                                extend_left(next_r, next_c, next_node, new_rack, letter + built_word, new_placed_tiles)
+
+        # --- Initial Call ---
+        # The generation logic starts from the anchor square.
+        # We either use an existing tile at the anchor or try placing a tile there.
+
+        anchor_square = self.board[anchor_row][anchor_col]
+        if not anchor_square.is_empty():
+            # If anchor is occupied, start extending right using the existing letter
+            tile = anchor_square.tile
+            letter = tile.get_value_letter()
+            if letter in self.gaddag.root.arcs:
+                # If the anchor letter is a starting point in GADDAG (for right extension)
+                # This case is complex with GADDAG, usually moves *must* place a tile.
+                # A simpler approach might be to only anchor on empty squares adjacent to tiles.
+                # However, the definition allows anchoring on occupied squares if extending.
+                # For now, we focus on placing tiles *through* the anchor.
+                pass  # Skip starting on occupied anchor for now, focus on placing tiles
+        else:
+            # Anchor is empty, try placing tiles on it, initiating the left/right extensions
+            place_tile_at(anchor_row, anchor_col, self.gaddag.root, rack, "", [])
+
+        # Post-processing: Ensure unique moves (same word, pos, dir can be found via different paths)
+        # The `results` list currently holds (word_string, placed_tiles_info)
+        # We need to derive the start position and direction to make them unique.
+        unique_moves = {}  # Dict key: (start_r, start_c, direction, word), value: placed_tiles_info
+        for word, placed_tiles in results:
+            if not placed_tiles: continue
+            min_r = min(r for r, c, t in placed_tiles)
+            min_c = min(c for r, c, t in placed_tiles)
+            start_r, start_c = (min_r, min_c)  # Approximation, needs refinement based on direction
+
+            # Determine start coordinate accurately based on direction
+            first_tile_info = min(placed_tiles, key=lambda x: (x[0] * dr + x[1] * dc))
+            start_r, start_c = first_tile_info[0], first_tile_info[1]
+
+            direction_char = 'H' if is_horizontal else 'V'
+            move_key = (start_r, start_c, direction_char, word)
+            if move_key not in unique_moves:
+                unique_moves[move_key] = placed_tiles
+            # Optional: Keep the one with more placed tiles if duplicates arise?
+
+        # Convert back to the required format
+        final_results = []
+        for (r, c, d, w), p_tiles in unique_moves.items():
+            final_results.append((w, p_tiles))  # Return word and placement info for scoring
+
+        return final_results
+
+    def _reconstruct_word(self, start_r, start_c, is_horizontal, placed_tiles_info):
+        """ Reconstructs the full word string from the starting position and placed tiles. """
+        word_letters = []
+        (dr, dc) = (0, 1) if is_horizontal else (1, 0)
+        r, c = start_r, start_c
+        placed_dict = {(pr, pc): tile for pr, pc, tile in placed_tiles_info}
+
+        while self._is_valid_coord(r, c):
+            square = self.board[r][c]
+            if (r, c) in placed_dict:
+                tile = placed_dict[(r, c)]
+                # Use the assigned letter if blank, otherwise the tile letter
+                letter = tile.letter if not tile.is_blank else tile.letter  # Already assigned
+                if not letter or letter == '?': return None  # Error case: blank wasn't assigned
+                word_letters.append(letter)
+            elif not square.is_empty():
+                word_letters.append(square.tile.get_value_letter())
+            else:
+                # Found empty square, check if it's the end *after* the last placed tile
+                max_pos = max(pr * dr + pc * dc for pr, pc, t in placed_tiles_info)
+                current_pos = r * dr + c * dc
+                if current_pos > max_pos:
+                    break  # Word ends here
+                else:
+                    # Gap in the word - should not happen with GADDAG generation if correct
+                    # print(f"Warning: Gap detected reconstructing word at {r},{c}")
+                    return None  # Indicate error
+
+            r += dr
+            c += dc
+
+        return "".join(word_letters) if word_letters else None
+
+    def _calculate_score(self, placed_tiles: List[Tuple[int, int, Tile]], is_horizontal: bool) -> Tuple[int, str]:
+        """
+        Calculates the score of placing the given tiles.
+
+        Args:
+            placed_tiles: List of (row, col, tile_object) tuples for tiles placed from rack.
+                          The tile_object stores the letter used (even for blanks).
+            is_horizontal: True if the main word is horizontal, False if vertical.
+
+        Returns:
+            Tuple: (total_score, word_string)
+                   Returns (0, "") if the placement is invalid or results in no word.
+        """
+        if not placed_tiles:
+            return 0, ""
+
+        total_score = 0
+        main_word_multiplier = 1
+        main_word_letter_score_sum = 0
+        bingo_bonus = 50 if len(placed_tiles) == 7 else 0
+
+        (dr, dc) = (0, 1) if is_horizontal else (1, 0)
+        (cross_dr, cross_dc) = (1, 0) if is_horizontal else (0, 1)
+
+        # Find the full extent of the main word
+        placed_coords = set((r, c) for r, c, t in placed_tiles)
+        min_coord = min(r * dr + c * dc for r, c, t in placed_tiles)
+        max_coord = max(r * dr + c * dc for r, c, t in placed_tiles)
+
+        # Find start of the main word by going backwards from the first placed tile
+        first_placed_tile_info = min(placed_tiles, key=lambda x: x[0] * dr + x[1] * dc)
+        start_r, start_c = first_placed_tile_info[0], first_placed_tile_info[1]
+        while True:
+            prev_r, prev_c = start_r - dr, start_c - dc
+            if self._is_valid_coord(prev_r, prev_c) and not self.board[prev_r][prev_c].is_empty():
+                start_r, start_c = prev_r, prev_c
             else:
                 break
-        prefix = prefix[::-1]  # Reverse to get correct order
 
-        # Function to extend right (forward) from a position
-        def extend_right(node, path, pos, remaining_rack, used_blanks=None):
-            if used_blanks is None:
-                used_blanks = []  # Track positions where blanks are used
+        # Iterate through the main word to calculate score
+        current_r, current_c = start_r, start_c
+        main_word_str_list = []
+        while self._is_valid_coord(current_r, current_c):
+            square = self.board[current_r][current_c]
+            tile_info = next((t for r, c, t in placed_tiles if r == current_r and c == current_c), None)
 
-            r, c = pos
+            if tile_info:  # This is a newly placed tile
+                tile_object = tile_info
+                letter_value = 0 if tile_object.is_blank else letter_values[tile_object.letter.upper()]
+                main_word_str_list.append(tile_object.letter)  # Use assigned letter
 
-            # Check if we're still on the board
-            if r < 0 or r >= self.size or c < 0 or c >= self.size:
-                return
-
-            # Get cross-checks for the current position (not just using anchor's cross-checks)
-            current_cross_checks = self._get_cross_checks(r, c, is_horizontal)
-            if not current_cross_checks:  # No valid letters can be placed here
-                return
-
-            # If the current square has a tile, incorporate it and continue
-            if self.board[r][c].tile is not None:
-                letter = self.board[r][c].tile.letter
-                if letter in node.arcs:
-                    next_node = node.arcs[letter]
-                    new_path = path + [letter]
-
-                    # If we've made a valid word, record it
-                    if next_node.is_terminal:
-                        # Find the complete word
-                        complete_word = ''.join(prefix + new_path)
-
-                        # Apply lowercase to indicate blanks
-                        word_with_blanks = list(complete_word.upper())
-                        for idx in used_blanks:
-                            if 0 <= idx < len(word_with_blanks):
-                                word_with_blanks[idx] = word_with_blanks[idx].lower()
-
-                        formatted_word = ''.join(word_with_blanks)
-
-                        # Calculate starting position
-                        start_row = row - dr * len(prefix)
-                        start_col = col - dc * len(prefix)
-
-                        # Add the move
-                        moves.append(Move(
-                            row=start_row,
-                            col=start_col,
-                            direction='across' if is_horizontal else 'down',
-                            word=formatted_word,
-                            score=self._calculate_score(start_row, start_col, complete_word, is_horizontal)
-                        ))
-
-                    # Continue extending - make sure to increment position correctly
-                    extend_right(next_node, new_path, (r + dr, c + dc), remaining_rack, used_blanks)
-            else:
-                # Empty square - try letters from rack that satisfy cross checks
-                for i, letter in enumerate(remaining_rack):
-                    is_blank = letter == ''
-
-                    # For regular tiles, check if the letter is valid
-                    if not is_blank:
-                        if letter in node.arcs and letter in current_cross_checks:
-                            next_node = node.arcs[letter]
-                            new_path = path + [letter]
-                            new_rack = remaining_rack.copy()
-                            new_rack.pop(i)
-
-                            # If we've made a valid word, record it
-                            if next_node.is_terminal:
-                                complete_word = ''.join(prefix + new_path)
-
-                                start_row = row - dr * len(prefix)
-                                start_col = col - dc * len(prefix)
-
-                                moves.append(Move(
-                                    row=start_row,
-                                    col=start_col,
-                                    direction='across' if is_horizontal else 'down',
-                                    word=complete_word,
-                                    score=self._calculate_score(start_row, start_col, complete_word, is_horizontal)
-                                ))
-
-                            # Continue extending - make sure to increment position correctly
-                            extend_right(next_node, new_path, (r + dr, c + dc), new_rack, used_blanks)
-
-                    # For blank tiles, try all valid cross-check letters
-                    else:
-                        for cross_letter in current_cross_checks:
-                            if cross_letter in node.arcs:
-                                next_node = node.arcs[cross_letter]
-                                # Use lowercase to mark it was a blank
-                                blank_pos = len(prefix) + len(path)
-                                new_path = path + [cross_letter]
-                                new_rack = remaining_rack.copy()
-                                new_rack.pop(i)
-                                new_used_blanks = used_blanks + [blank_pos]
-
-                                # If we've made a valid word, record it
-                                if next_node.is_terminal:
-                                    complete_word = ''.join(prefix + new_path)
-
-                                    # Mark blanks as lowercase in the final word
-                                    word_with_blanks = list(complete_word.upper())
-                                    for idx in new_used_blanks:
-                                        if 0 <= idx < len(word_with_blanks):
-                                            word_with_blanks[idx] = word_with_blanks[idx].lower()
-
-                                    formatted_word = ''.join(word_with_blanks)
-
-                                    start_row = row - dr * len(prefix)
-                                    start_col = col - dc * len(prefix)
-
-                                    moves.append(Move(
-                                        row=start_row,
-                                        col=start_col,
-                                        direction='across' if is_horizontal else 'down',
-                                        word=formatted_word,
-                                        score=self._calculate_score(start_row, start_col, complete_word, is_horizontal)
-                                    ))
-
-                                # Continue extending - make sure to increment position correctly
-                                extend_right(next_node, new_path, (r + dr, c + dc), new_rack, new_used_blanks)
-
-        # Handle different cases based on prefix existence
-        if prefix:
-            # GADDAG pattern: go through reversed prefix to delimiter, then forward
-            current_node = self.gaddag.root
-
-            # Try to navigate through the reversed prefix
-            for letter in reversed(prefix):
-                if letter in current_node.arcs:
-                    current_node = current_node.arcs[letter]
-                else:
-                    # Invalid prefix path in GADDAG
-                    return moves
-
-            # Check if we can cross the delimiter
-            if self.gaddag.delimiter in current_node.arcs:
-                # Start extending from after the delimiter
-                delimiter_node = current_node.arcs[self.gaddag.delimiter]
-                extend_right(delimiter_node, [], (row, col), rack_letters)
-        else:
-            # No prefix - we need to place the first letter at the anchor
-            for i, letter in enumerate(rack_letters):
-                is_blank = letter == ''
-
-                if not is_blank:
-                    # Regular tile
-                    if letter in cross_checks:
-                        # Check if placing this letter starts a valid word path
-                        if letter in self.gaddag.root.arcs:
-                            next_node = self.gaddag.root.arcs[letter]
-                            new_rack = rack_letters.copy()
-                            new_rack.pop(i)
-
-                            # Check if a single letter is a valid word
-                            if next_node.is_terminal:
-                                moves.append(Move(
-                                    row=row,
-                                    col=col,
-                                    direction='across' if is_horizontal else 'down',
-                                    word=letter,
-                                    score=self._calculate_score(row, col, letter, is_horizontal)
-                                ))
-
-                            # Try to extend this beginning
-                            if self.gaddag.delimiter in next_node.arcs:
-                                after_delimiter = next_node.arcs[self.gaddag.delimiter]
-                                extend_right(after_delimiter, [letter], (row + dr, col + dc), new_rack)
-                else:
-                    # Blank tile - try all valid cross-check letters
-                    for cross_letter in cross_checks:
-                        if cross_letter in self.gaddag.root.arcs:
-                            next_node = self.gaddag.root.arcs[cross_letter]
-                            new_rack = rack_letters.copy()
-                            new_rack.pop(i)
-
-                            # Mark as lowercase to indicate blank
-                            blank_letter = cross_letter.lower()
-
-                            # Check if a single letter is a valid word
-                            if next_node.is_terminal:
-                                moves.append(Move(
-                                    row=row,
-                                    col=col,
-                                    direction='across' if is_horizontal else 'down',
-                                    word=blank_letter,
-                                    score=self._calculate_score(row, col, cross_letter, is_horizontal)
-                                ))
-
-                            # Try to extend this beginning
-                            if self.gaddag.delimiter in next_node.arcs:
-                                after_delimiter = next_node.arcs[self.gaddag.delimiter]
-                                extend_right(after_delimiter, [cross_letter], (row + dr, col + dc), new_rack, [0])
-
-        return moves
-
-    def _calculate_score(self, row: int, col: int, word: str, is_horizontal: bool) -> int:
-        word = word.upper()  # Convert to uppercase to match letter_values keys
-        word_score = 0
-        word_multiplier = 1  # Default, will be updated based on premium squares
-
-        tiles_from_rack = 0
-        for i, letter in enumerate(word):
-            # Calculate the current position
-            current_row = row
-            current_col = col
-
-            if is_horizontal:
-                current_col += i
-            else:
-                current_row += i
-
-            # Check if position is within board boundaries
-            if (current_row < 0 or current_row >= 15 or
-                    current_col < 0 or current_col >= 15):
-                raise ValueError(f"Position ({current_row}, {current_col}) is outside the board")
-
-            # Get letter value
-            letter_value = letter_values.get(letter, 0)
-            letter_multiplier = 1  # Default multiplier
-
-            # Apply premium square effects
-            premium = self.board[current_row][current_col].premium
-
-            # Check if the square already has a tile (premium doesn't apply)
-            tile_exists = self.board[current_row][current_col].tile is not None
-
-            if not tile_exists:
-                tiles_from_rack += 1
-
-            if premium and not tile_exists:
+                premium = square.premium
+                letter_multiplier = 1
                 if premium == 'DL':
                     letter_multiplier = 2
                 elif premium == 'TL':
                     letter_multiplier = 3
-                elif premium == 'DW':
-                    word_multiplier *= 2
+
+                current_letter_score = letter_value * letter_multiplier
+                main_word_letter_score_sum += current_letter_score
+
+                if premium == 'DW':
+                    main_word_multiplier *= 2
                 elif premium == 'TW':
-                    word_multiplier *= 3
+                    main_word_multiplier *= 3
 
-            # Add letter score with any letter multiplier
-            word_score += letter_value * letter_multiplier
+                # Calculate cross-word score IF a cross word is formed
+                cross_word_letters = [tile_object.letter]  # Start with the placed letter
+                cross_score = 0
+                cross_word_multiplier = 1  # Multiplier for the cross-word itself
+                has_cross_neighbors = False
 
-        # Apply word multiplier to get final score
-        final_score = word_score * word_multiplier
+                # Look perpendicularly backwards
+                pr, pc = current_r - cross_dr, current_c - cross_dc
+                prefix = []
+                while self._is_valid_coord(pr, pc) and not self.board[pr][pc].is_empty():
+                    has_cross_neighbors = True
+                    cross_tile = self.board[pr][pc].tile
+                    prefix.append(cross_tile.get_value_letter())
+                    cross_score += cross_tile.get_score()  # Add score of existing tiles
+                    pr -= cross_dr
+                    pc -= cross_dc
+                cross_word_letters = prefix[::-1] + cross_word_letters
 
-        # Apply bingo bonus if all 7 tiles from rack were used
-        if tiles_from_rack == 7:
-            final_score += 50
+                # Look perpendicularly forwards
+                sr, sc = current_r + cross_dr, current_c + cross_dc
+                suffix = []
+                while self._is_valid_coord(sr, sc) and not self.board[sr][sc].is_empty():
+                    has_cross_neighbors = True
+                    cross_tile = self.board[sr][sc].tile
+                    suffix.append(cross_tile.get_value_letter())
+                    cross_score += cross_tile.get_score()  # Add score of existing tiles
+                    sr += cross_dr
+                    sc += cross_dc
+                cross_word_letters.extend(suffix)
 
-        return final_score
+                # If a cross word longer than 1 letter was formed
+                if has_cross_neighbors and len(cross_word_letters) > 1:
+                    # Check validity (redundant if GADDAG/cross-checks worked, but good safeguard)
+                    cross_word_str = "".join(cross_word_letters)
+                    if not self.gaddag.is_valid_word(cross_word_str):
+                        # print(f"Error: Invalid cross-word '{cross_word_str}' generated at {current_r},{current_c}")
+                        return 0, ""  # Invalid move
 
+                    # Apply premium from the *shared* square to the cross-word score sum
+                    cross_score += current_letter_score  # Add score of the placed tile (already includes letter premium)
+                    # Apply word multipliers from the *shared* square
+                    if premium == 'DW':
+                        cross_word_multiplier *= 2
+                    elif premium == 'TW':
+                        cross_word_multiplier *= 3
+                    # Apply word multipliers from *other* squares in the cross word (already accounted for in cross_score for existing tiles?)
+                    # No, need to re-evaluate premiums for existing tiles within the cross-word context if needed, but standard rules usually only apply premiums once per placement.
+                    # The common rule: premiums on squares only count when a tile is first placed there.
+                    # So, cross_score just sums the base values of existing tiles + the premium-adjusted value of the new tile.
+                    # Word multipliers apply to the sum.
 
-    def get_all_legal_moves(self, rack: List[Tile]) -> List[Move]:
-        if not self.gaddag:
-            raise ValueError("Dictionary not loaded. Call load_dictionary() first.")
+                    total_score += (cross_score * cross_word_multiplier)
 
-        moves = []
+            elif not square.is_empty():  # Existing tile, part of the main word
+                tile_object = square.tile
+                letter_value = tile_object.get_score()
+                main_word_letter_score_sum += letter_value
+                main_word_str_list.append(tile_object.get_value_letter())
+            else:
+                # Found an empty square - word should end here unless it's before the first placed tile
+                current_pos = current_r * dr + current_c * dc
+                if current_pos < min_coord or current_pos > max_coord:
+                    break  # Reached end of the word
+                else:
+                    # Error: Gap in word
+                    # print(f"Error: Gap found during scoring at {current_r},{current_c}")
+                    return 0, ""
+
+            # Move to the next square in the main word direction
+            current_r += dr
+            current_c += dc
+
+        # Add score from the main word itself
+        total_score += (main_word_letter_score_sum * main_word_multiplier)
+        # Add bingo bonus
+        total_score += bingo_bonus
+
+        main_word_str = "".join(main_word_str_list)
+
+        # Final check: main word must be valid
+        if len(main_word_str) < 2:
+            # This check might be too strict if single-letter words are allowed in the dict
+            pass  # Allow potentially valid single-letter plays if dict supports it
+
+        if not self.gaddag.is_valid_word(main_word_str):
+            # print(f"Error: Invalid main word '{main_word_str}' generated.")
+            return 0, ""
+
+        return total_score, main_word_str
+
+    def get_all_legal_moves(self, rack_tiles: List[Tile]) -> List[Move]:
+        """
+        Finds all valid moves for the given rack on the current board state.
+
+        Args:
+            rack_tiles: A list of Tile objects representing the player's rack.
+
+        Returns:
+            A list of Move namedtuples, sorted by score descending.
+        """
+        rack = Counter(t.letter if not t.is_blank else '?' for t in rack_tiles)
         anchors = self._get_all_anchors()
+        potential_moves: Dict[Tuple[int, int, str, str], Tuple[
+            int, List[Tuple[int, int, Tile]]]] = {}  # Key: (r, c, dir, word), Value: (score, placed_tiles)
+        center_coord = (self.size // 2, self.size // 2)
+        is_first = self._is_empty()
 
-        for row, col in anchors:
-            # Horizontal moves
-            moves.extend(self._find_moves_from_anchor(row, col, rack, is_horizontal=True))
+        if not anchors and not is_first:
+            print("No anchors found on non-empty board.")
+            return []  # No possible moves if no anchors
 
-            # Vertical moves
-            moves.extend(self._find_moves_from_anchor(row, col, rack, is_horizontal=False))
+        if is_first and not anchors:  # Should not happen if _get_all_anchors is correct
+            print("Error: Board empty but no center anchor found.")
+            return []
 
-        return sorted(moves, key=lambda m: m.score, reverse=True)
+        for r_anchor, c_anchor in anchors:
+            # Generate Horizontal moves
+            h_moves = self._find_moves_from_anchor(r_anchor, c_anchor, rack.copy(), is_horizontal=True)
+            for word, placed_tiles in h_moves:
+                if not placed_tiles: continue
+                # First move must cross center
+                if is_first and not any(r == center_coord[0] and c == center_coord[1] for r, c, t in placed_tiles):
+                    continue
+
+                score, word_validated = self._calculate_score(placed_tiles, is_horizontal=True)
+                if score > 0 and word == word_validated:  # Check score is positive and word reconstruction matches
+                    first_tile_info = min(placed_tiles, key=lambda x: x[1])  # Min col for H move
+                    start_r, start_c = first_tile_info[0], first_tile_info[1]
+                    move_key = (start_r, start_c, 'H', word)
+                    if move_key not in potential_moves or score > potential_moves[move_key][0]:
+                        potential_moves[move_key] = (score, placed_tiles)
+
+            # Generate Vertical moves
+            v_moves = self._find_moves_from_anchor(r_anchor, c_anchor, rack.copy(), is_horizontal=False)
+            for word, placed_tiles in v_moves:
+                if not placed_tiles: continue
+                # First move must cross center
+                if is_first and not any(r == center_coord[0] and c == center_coord[1] for r, c, t in placed_tiles):
+                    continue
+
+                score, word_validated = self._calculate_score(placed_tiles, is_horizontal=False)
+                if score > 0 and word == word_validated:
+                    first_tile_info = min(placed_tiles, key=lambda x: x[0])  # Min row for V move
+                    start_r, start_c = first_tile_info[0], first_tile_info[1]
+                    move_key = (start_r, start_c, 'V', word)
+                    if move_key not in potential_moves or score > potential_moves[move_key][0]:
+                        potential_moves[move_key] = (score, placed_tiles)
+
+        # Convert to Move objects
+        final_moves = []
+        for (r, c, d, w), (score, placed) in potential_moves.items():
+            # Optional: Modify word string to show blanks e.g., 'Wo(R)D' if 'R' was blank
+            # For now, just use the standard word string.
+            final_moves.append(Move(row=r, col=c, direction=d, word=w, score=score))
+
+        # Sort by score descending
+        final_moves.sort(key=lambda x: x.score, reverse=True)
+
+        # After the first successful move, update the board state flag
+        # This should ideally happen *after* a move is chosen and applied, not during generation.
+        # if is_first and final_moves:
+        #    self.is_first_move = False # Move this logic to where a move is actually placed on the board
+
+        return final_moves
 
     def set_board(self, board: List[List[Tile]]):
         for row in range(self.size):
@@ -557,13 +706,19 @@ class ScrabbleBoard:
             r = row + i
             self.board[r][col].tile = Tile(word[i])
 
-    def __str__(self):
-        result = ''
-        for row in range(self.size):
-            s = ''
-            for col in range(self.size):
-                tile = self.board[row][col].tile
-                s += tile.letter if tile else ' '
-            s += '\n'
-            result += s
-        return result
+    def print_board(self):
+        """Prints the current board state to the console."""
+        print("   " + "  ".join(f"{i:<2}" for i in range(self.size)))
+        print("  +" + "---+" * self.size)
+        for r in range(self.size):
+            row_str = f"{r:<2}|"
+            for c in range(self.size):
+                square = self.board[r][c]
+                if square.tile:
+                    content = square.tile.get_value_letter()
+                else: content = ' ' # Empty non-premium
+
+                # Pad content to 2 chars for alignment
+                row_str += f" {content:<2}|" # Pad right
+            print(row_str)
+            print("  +" + "---+" * self.size)
