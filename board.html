@@ -382,13 +382,6 @@
 
             <button id="placeWordButton">Place Word</button>
         </div>
-
-        <div class="blank-toggle">
-            <label>Blank tiles:</label>
-            <input type="text" id="blankLettersInput" placeholder="e.g. 3,5"
-                   title="Enter positions of blank tiles (0-based, comma separated)">
-            <span style="font-size: 12px; color: #666;">Enter positions of blank tiles (0-based, comma-separated)</span>
-        </div>
     </div>
 
     <p>Click on a square to add or edit a tile. Right-click to remove a tile.</p>
@@ -545,8 +538,16 @@ for (let i = 0; i < letters.length; i++) {
 
   letterDiv.addEventListener('click', function() {
     if (letter === '_') {
-      isBlankTileMode = true;
-      showBlankTileModal();
+      if (currentRackIndex !== null) {
+            // For rack tiles, we just place a blank tile directly without showing the modal
+            placeRackTile(currentRackIndex, '_', true);
+            hideLetterSelector();
+            currentRackIndex = null;
+        } else {
+            // For board tiles, show the modal to select a letter
+            isBlankTileMode = true;
+            showBlankTileModal();
+        }
     } else {
       if (currentRackIndex !== null) {
         placeRackTile(currentRackIndex, letter, false);
@@ -566,7 +567,7 @@ const blankTileModal = document.getElementById('blankTileModal');
 const blankTileLetters = document.getElementById('blankTileLetters');
 
 // Populate blank tile letter options
-for (let i = 0; i < 26; i++) {
+for (let i = 0; i < 32; i++) {
   const letter = letters[i];
   const letterOption = document.createElement('div');
   letterOption.className = 'blank-letter-option';
@@ -737,7 +738,7 @@ function placeRackTile(index, letter, isBlank) {
 
   const letterSpan = document.createElement('div');
   letterSpan.className = 'tile-letter';
-  letterSpan.textContent = letter;
+  letterSpan.textContent = (isBlank && letter === '_') ? '' : letter;
   tile.appendChild(letterSpan);
 
   if (!isBlank) {
