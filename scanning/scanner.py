@@ -3,7 +3,9 @@ import numpy as np
 import easyocr
 import matplotlib.pyplot as plt
 
-reader = easyocr.Reader(['pl'])
+from board import Tile, ScrabbleBoard
+
+reader = easyocr.Reader(['pl'], gpu=True)
 
 def extract_board_image(path):
     img = cv.imread(path)
@@ -158,7 +160,6 @@ def determine_if_i(tile, row, col):
     total_mean_intensity = np.mean(tile)
     if total_mean_intensity < global_black_threshold:
         return None
-    print(f'{row}/{col}/{total_mean_intensity}')
 
     height, width = tile.shape[:2]
 
@@ -173,7 +174,6 @@ def determine_if_i(tile, row, col):
         roi = cv.cvtColor(roi, cv.COLOR_BGR2GRAY)
 
     mean_intensity = np.mean(roi)
-    print(mean_intensity)
 
     if mean_intensity < black_threshold:
         return 'I'
@@ -182,6 +182,13 @@ def determine_if_i(tile, row, col):
 
 
 def scan(path):
-    return extract_letters_from_board(apply_mask(extract_board_image(path)))
+    raw = extract_letters_from_board(apply_mask(extract_board_image(path)))
+    for i in range(15):
+        for j in range(15):
+            text = raw[i][j]
+            if text:
+                raw[i][j] = Tile(text, False)
+    return raw
+
 
 
